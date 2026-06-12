@@ -424,7 +424,13 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
       <button class="bp" onclick="abrirFProd()"><i class="ti ti-plus" style="font-size:13px;vertical-align:-2px"></i> Agregar</button>
       <button class="bs" onclick="go('categorias',null)"><i class="ti ti-category" style="font-size:13px;vertical-align:-2px"></i> Cats.</button>
     </div>
-    <div class="sw"><i class="ti ti-search"></i><input class="sinp" type="text" placeholder="Buscar producto..." oninput="rProds(this.value)"></div>
+    <div class="sw"><i class="ti ti-search"></i><input class="sinp" type="text" placeholder="Buscar producto..." id="prod-srch" oninput="rProds(this.value)"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <button id="filt-todos" onclick="setFiltStock('todos')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid var(--g);background:var(--g);color:#fff;cursor:pointer">Todos</button>
+      <button id="filt-bajo" onclick="setFiltStock('bajo')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid #EFC97A;background:transparent;color:var(--a);cursor:pointer"><i class="ti ti-alert-triangle" style="font-size:10px;vertical-align:-1px"></i> Stock bajo</button>
+      <button id="filt-sin" onclick="setFiltStock('sin')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid #F09595;background:transparent;color:var(--r);cursor:pointer"><i class="ti ti-x" style="font-size:10px;vertical-align:-1px"></i> Sin stock</button>
+      <button id="filt-peso" onclick="setFiltStock('peso')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid #85B7EB;background:transparent;color:var(--b);cursor:pointer"><i class="ti ti-weight" style="font-size:10px;vertical-align:-1px"></i> Por peso</button>
+    </div>
     <div id="prod-lista"><div class="loading"><div class="spin"></div> Cargando...</div></div>
   </div>
   <div id="t-prodf" style="display:none"><button class="bbk" onclick="vProds()"><i class="ti ti-arrow-left"></i> Volver</button><div id="prod-fw"></div></div>
@@ -1508,10 +1514,37 @@ async function elimCli(id){const c=clis.find(x=>x.id===id);if(!c||!confirm(`¿El
 async function guardarCli(){const nom=document.getElementById('ec-n')?.value.trim();if(!nom){alert('Ingresa el nombre');return;}const cas=document.getElementById('ec-cas')?.checked||false;const datos={nombre:nom,dni:document.getElementById('ec-dni')?.value.trim()||'',tel:document.getElementById('ec-tel')?.value.trim()||'',dir:document.getElementById('ec-dir')?.value.trim()||'',casero:cas};if(eCId){await sb.from('clientes').update(datos).eq('id',eCId);const c=clis.find(x=>x.id===eCId);if(c)Object.assign(c,datos);toastEl('tc-toast','tc-txt',`"${nom}" actualizado`);}else{const{data}=await sb.from('clientes').insert({...datos,deuda:0}).select().single();if(data)clis.push(data);toastEl('tc-toast','tc-txt',`"${nom}" guardado`);}rCliSel();vClis();}
 
 // ── PRODUCTOS ─────────────────────────────────────────────────────────────────
+let filtStock='todos';
+function setFiltStock(f){
+  filtStock=f;
+  // Actualizar botones
+  const btns={todos:'filt-todos',bajo:'filt-bajo',sin:'filt-sin',peso:'filt-peso'};
+  const cols={todos:['var(--g)','var(--g)','#fff'],bajo:['#EFC97A','transparent','var(--a)'],sin:['#F09595','transparent','var(--r)'],peso:['#85B7EB','transparent','var(--b)']};
+  Object.entries(btns).forEach(([k,id])=>{
+    const btn=document.getElementById(id);if(!btn)return;
+    const[bc,bg,tc]=cols[k];
+    if(k===f){btn.style.background=bc;btn.style.color='#fff';btn.style.borderColor=bc;}
+    else{btn.style.background=bg;btn.style.color=tc;btn.style.borderColor=bc;}
+  });
+  // Fix active button color
+  const activeBtn=document.getElementById(btns[f]);
+  if(activeBtn){
+    if(f==='todos'){activeBtn.style.background='var(--g)';activeBtn.style.color='#fff';activeBtn.style.borderColor='var(--g)';}
+    else if(f==='bajo'){activeBtn.style.background='var(--al)';activeBtn.style.color='var(--a)';activeBtn.style.borderColor='#EFC97A';}
+    else if(f==='sin'){activeBtn.style.background='var(--rl)';activeBtn.style.color='var(--r)';activeBtn.style.borderColor='#F09595';}
+    else if(f==='peso'){activeBtn.style.background='var(--bl)';activeBtn.style.color='var(--b)';activeBtn.style.borderColor='#85B7EB';}
+  }
+  rProds(document.getElementById('prod-srch')?.value||'');
+}
 function rStockStats(){const cont=document.getElementById('stock-stats');if(!cont)return;const sin=prods.filter(p=>p.tipo==='unidad'&&p.stock===0).length;const bj=prods.filter(p=>p.tipo==='unidad'&&p.stock>0&&p.stock<=STOCK_MIN).length;cont.innerHTML=`<div class="sc"><div class="sl">Total</div><div class="sv">${prods.length}</div></div><div class="sc"><div class="sl">Stock bajo</div><div class="sv" style="color:var(--a)">${bj}</div></div><div class="sc"><div class="sl">Sin stock</div><div class="sv" style="color:var(--r)">${sin}</div></div>`;}
 function rProds(q=''){
   const cont=document.getElementById('prod-lista');rStockStats();
-  let lista=prods;if(q){lista=prods.filter(p=>matchQ(p.nombre+' '+p.cat+' '+(p.subcategoria||''),q));}
+  let lista=prods;
+  if(q){lista=lista.filter(p=>matchQ(p.nombre+' '+p.cat+' '+(p.subcategoria||''),q));}
+  // Aplicar filtro de stock
+  if(filtStock==='bajo')lista=lista.filter(p=>p.tipo==='unidad'&&p.stock>0&&p.stock<=STOCK_MIN);
+  else if(filtStock==='sin')lista=lista.filter(p=>p.tipo==='unidad'&&p.stock===0);
+  else if(filtStock==='peso')lista=lista.filter(p=>p.tipo==='peso'||p.tipo==='bolsa');
   if(!lista.length){cont.innerHTML='<div class="empty"><i class="ti ti-package"></i><p>Sin productos</p></div>';return;}
   const tL={unidad:'Por unidad',peso:'Por peso',bolsa:'Bolsas'};
   cont.innerHTML=lista.map(p=>{
@@ -2202,11 +2235,16 @@ async function guardarCuenta(id){
       cerrarFCuenta();
       await rCuentas();
     } else {
-      // Crear usuario con signUp
-      const{data,error}=await sb.auth.signUp({email,password:pass});
-      if(error)throw error;
-      const uid=data.user?.id;if(!uid)throw new Error('No se pudo obtener el ID del usuario');
-      await sb.from('roles_usuario').insert({id:uid,email,nombre,rol});
+      // Crear usuario via Edge Function (usa service_role key de forma segura)
+      const{data:{session}}=await sb.auth.getSession();
+      const token=session?.access_token;
+      const resp=await fetch('https://zfumhtmjluwlbdpzrawc.supabase.co/functions/v1/crear-usuario',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({email,password:pass,nombre,rol})
+      });
+      const result=await resp.json();
+      if(!result.ok)throw new Error(result.error||'Error al crear usuario');
       toastEl('cuentas-toast','cuentas-toast-txt',`Cuenta "${nombre}" creada`);
       cerrarFCuenta();
       await rCuentas();
