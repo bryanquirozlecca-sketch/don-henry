@@ -822,6 +822,9 @@ function buildCard(id){
       <button class="ab${e.inc?' on':''}" onclick="tCU(${id})">${e.inc?'<i class="ti ti-check" style="font-size:11px"></i> En carrito':'<i class="ti ti-plus" style="font-size:11px"></i> Agregar'}</button>`;
       const da=[['q','¼ doc','desc_q'],['m','½ doc','desc_m'],['d','Docena','desc_d'],['cj','Caja','desc_cj']].filter(([k,,dk])=>p[dk+'_on']&&p[dk+'_precio']);
       if(da.length||p.perm_danio){h+=`<div class="chks">`;h+=da.map(([k,lbl,dk])=>`<label class="chl"><input type="checkbox" ${e.dSel===k?'checked':''} onchange="sD(${id},'${k}',this.checked)"><span class="ct" style="color:var(--gd)">${lbl} · S/${p[dk+'_precio'].toFixed(4)}/u</span></label>`).join('');if(p.perm_danio)h+=`<label class="chl"><input type="checkbox" style="accent-color:#E53E3E" ${e.danOn?'checked':''} onchange="tD(${id},this.checked)"><span class="ct" style="color:var(--r)"><i class="ti ti-alert-triangle" style="font-size:10px"></i> Desc. por daño</span></label><input class="di" id="di-${id}" type="number" placeholder="Descontar S/..." step="0.50" min="0" value="${e.danV}" style="display:${e.danOn?'block':'none'}" oninput="sDan(${id},this.value)">`;h+=`</div>`;}
+      // Bolsas / paquetes para producto por unidad
+      const bolsasU=p.bolsas||[];
+      if(bolsasU.length){h+=`<div class="sdiv"><span>Bolsas / Paquetes</span></div>`;h+=bolsasU.map(b=>itemSelHtml(id,b.id,b.nombre,b.precio,'📦','bolsa')).join('');}
     }
   } else if(p.tipo==='peso'){
     const mG=e.modo==='g';const gv=parseFloat(e.grams)||0;const sv=parseFloat(e.soles)||0;
@@ -1602,7 +1605,7 @@ async function duplicarProd(id){
   const nuevoNombre=p.nombre+' (copia)';
   // Copiar todos los campos excepto id, imagen_url y nombre
   const{id:_,imagen_url:_img,nombre:_n,...resto}=p;
-  const datos={...resto,nombre:nuevoNombre,imagen_url:'',stock:0};
+  const datos={...resto,nombre:nuevoNombre,imagen_url:'',stock:500};
   const{data,error}=await sb.from('productos').insert(datos).select().single();
   if(error){alert('Error al duplicar: '+error.message);return;}
   if(data){prods.push(data);initE(data);}
@@ -1676,7 +1679,7 @@ function htmlPrecioCompra(esAdmin, p, tipo){
 function rFormProd(p){
   const esAdmin = usuarioActual?.rol==='admin';
   const co = cats.map(c=>'<option value="'+c+'" '+(p?.cat===c?'selected':'')+'>'+getCatEmoji(c)+' '+c+'</option>').join('');
-  const bI = p?.tipo==='bolsa' ? (p.bolsas||[]) : (p?.bolsas_pred||[]);
+  const bI = p?.tipo==='bolsa' ? (p.bolsas||[]) : p?.tipo==='unidad' ? (p?.bolsas||[]) : (p?.bolsas_pred||[]);
   const sI = p?.sacos||[];
   const cajUds = p?.desc_cj_uds||24;
 
@@ -1762,7 +1765,11 @@ function rFormProd(p){
           '<input type="checkbox" id="fdc-dan" '+(p?.perm_danio?'checked':'')+' style="accent-color:var(--r)" onchange="document.getElementById(&apos;fdb-dan&apos;).classList.toggle(&apos;on&apos;,this.checked)">'+
           '<div><div class="dbt">Permitir descuento por daño</div><div class="dbs">El cajero lo aplica al vender</div></div>'+
         '</label>'+
-      '</div>';
+      '</div>'+
+      '<div class="seclbl" style="margin-top:12px">Bolsas / Paquetes (opcional)</div>'+
+      '<div style="font-size:11px;color:var(--txt2);margin-bottom:8px">Presentaciones empaquetadas con precio propio. Ej: "Paquete x6", "Six pack".</div>'+
+      '<div id="bolsas-wrap">'+bolsasHtml+'</div>'+
+      '<button class="btn-add-b" onclick="addBolsa()"><i class="ti ti-plus"></i> Agregar bolsa/paquete</button>';
   } else if(tipoSel==='peso'){
     sectionHtml =
       '<div class="ff">'+
@@ -1859,7 +1866,7 @@ async function guardarProd(){
   const cat=document.getElementById('fp-c')?.value||cats[0];const stock=parseInt(document.getElementById('fp-s')?.value)||0;
   let datos={nombre:nom,cat,stock,tipo:tipoSel,subcategoria:getSubcatValue()};
   const pcInput=parseFloat(document.getElementById('fp-pc')?.value)||0;
-  if(tipoSel==='unidad'){const precio=parseFloat(document.getElementById('fp-p')?.value)||0;if(!precio){alert('Ingresa el precio base');return;}const cj=parseInt(document.getElementById('fp-cj')?.value)||24;['q','m','d'].forEach(k=>{datos[`desc_${k}_on`]=document.getElementById(`fdc-${k}`)?.checked||false;datos[`desc_${k}_precio`]=parseFloat(document.getElementById(`fdp-${k}`)?.value)||0;datos[`desc_${k}_total`]=parseFloat(document.getElementById(`fdt-${k}`)?.value)||0;});datos.desc_cj_on=document.getElementById('fdc-cj')?.checked||false;datos.desc_cj_precio=parseFloat(document.getElementById('fdp-cj')?.value)||0;datos.desc_cj_total=parseFloat(document.getElementById('fdt-cj')?.value)||0;datos.desc_cj_uds=cj;datos.precio=precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas=[];datos.bolsas_pred=[];datos.perm_danio=document.getElementById('fdc-dan')?.checked||false;if(pcInput)datos.precio_compra=pcInput;}
+  if(tipoSel==='unidad'){const precio=parseFloat(document.getElementById('fp-p')?.value)||0;if(!precio){alert('Ingresa el precio base');return;}const cj=parseInt(document.getElementById('fp-cj')?.value)||24;['q','m','d'].forEach(k=>{datos[`desc_${k}_on`]=document.getElementById(`fdc-${k}`)?.checked||false;datos[`desc_${k}_precio`]=parseFloat(document.getElementById(`fdp-${k}`)?.value)||0;datos[`desc_${k}_total`]=parseFloat(document.getElementById(`fdt-${k}`)?.value)||0;});datos.desc_cj_on=document.getElementById('fdc-cj')?.checked||false;datos.desc_cj_precio=parseFloat(document.getElementById('fdp-cj')?.value)||0;datos.desc_cj_total=parseFloat(document.getElementById('fdt-cj')?.value)||0;datos.desc_cj_uds=cj;datos.precio=precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas=getBolsas();datos.bolsas_pred=[];datos.perm_danio=document.getElementById('fdc-dan')?.checked||false;if(pcInput)datos.precio_compra=pcInput;}
   else if(tipoSel==='peso'){const kg=parseFloat(document.getElementById('fp-kg')?.value)||0;if(!kg){alert('Ingresa el precio por kilo');return;}datos.precio_kg=kg;datos.precio=kg;datos.sacos=getSacos();datos.bolsas_pred=getBolsas();datos.bolsas=[];datos.perm_danio=false;if(pcInput)datos.precio_compra=pcInput;}
   else{const bolsas=getBolsas();if(!bolsas.length){alert('Agrega al menos una bolsa');return;}datos.bolsas=bolsas;datos.precio=bolsas[0].precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas_pred=bolsas;datos.perm_danio=false;}
   if(ePId){
