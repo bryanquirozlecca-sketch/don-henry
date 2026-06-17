@@ -1371,73 +1371,59 @@ async function guardarEditPed(id){
 function imprimirBoleta(id){
   const p=pedidos.find(x=>x.id===id);if(!p)return;
   const detalles=p.items_detalle||[];
-  const sep='─'.repeat(52);
-  const sep2='─'.repeat(52);
-  // Cabecera
+  const linea='='.repeat(40);
+  // Cabecera — fuente base más grande (16px) para todo el ticket
   let contenido=`
-    <div style="font-family:'Courier New',monospace;font-size:12px;padding:16px;max-width:400px;margin:0 auto">
-    <div style="text-align:center;margin-bottom:10px">
-      <div style="font-size:16px;font-weight:bold">🛒 ABARROTES DON HENRY</div>
-      <div>Trujillo, La Libertad</div>
-      <div>─────────────────────────────────</div>
+    <div style="font-family:'Courier New',monospace;font-size:16px;line-height:1.4;padding:8px;max-width:100%;color:#000;font-weight:600">
+    <div style="text-align:center;margin-bottom:8px">
+      <div style="font-size:22px;font-weight:900;letter-spacing:.5px">ABARROTES</div>
+      <div style="font-size:22px;font-weight:900;letter-spacing:.5px;margin-bottom:2px">DON HENRY</div>
+      <div style="font-size:15px">Trujillo, La Libertad</div>
     </div>
-    <div style="margin-bottom:8px">
+    <div style="border-top:2px dashed #000;margin:8px 0"></div>
+    <div style="margin-bottom:8px;font-size:16px">
       <div><b>Cliente:</b> ${p.cliente_nombre}</div>
       <div><b>Fecha:</b> ${p.fecha} ${p.hora||''}</div>
       <div><b>Pago:</b> ${PLB[p.pago]||p.pago}</div>
       ${p.nota?`<div><b>Nota:</b> ${p.nota}</div>`:''}
     </div>
-    <div>─────────────────────────────────</div>`;
-  // Detalle de productos
+    <div style="border-top:2px dashed #000;margin:8px 0"></div>`;
+  // Detalle de productos — formato vertical (más legible en térmica que tabla angosta)
   if(detalles.length){
-    contenido+=`<table style="width:100%;font-size:11px;border-collapse:collapse;margin:8px 0">
-      <thead>
-        <tr style="border-bottom:1px solid #000">
-          <th style="text-align:left;padding:2px 4px">Descripción</th>
-          <th style="text-align:center;padding:2px 4px">Cant.</th>
-          <th style="text-align:right;padding:2px 4px">P/Unit.</th>
-          <th style="text-align:right;padding:2px 4px">P/S.Desc.</th>
-          <th style="text-align:right;padding:2px 4px">Desc.</th>
-          <th style="text-align:right;padding:2px 4px">Total</th>
-        </tr>
-      </thead><tbody>`;
     detalles.forEach(item=>{
-      const esSimple=item.tag!=='u'; // bolsa, saco, granel
+      const esSimple=item.tag!=='u';
       const precioBase=item.precioBase||item.precio;
       const descuento=esSimple?0:rd2((precioBase-item.precio)*item.qty);
-      const sinDesc=esSimple?'':('S/'+rd2(precioBase).toFixed(2));  // precio/u sin descuento
-      const desc=esSimple||descuento===0?'':'S/'+descuento.toFixed(2);
-      const pUnit=esSimple?'':'S/'+item.precio.toFixed(2);
       const cant=item.tag==='g'?(item.subNombre||item.qty):item.qty;
-      contenido+=`<tr style="border-bottom:1px dashed #ccc">
-        <td style="padding:3px 4px">${item.nombre}${item.label?' ('+item.label+')':''}</td>
-        <td style="text-align:center;padding:3px 4px">${cant}</td>
-        <td style="text-align:right;padding:3px 4px">${pUnit}</td>
-        <td style="text-align:right;padding:3px 4px">${sinDesc}</td>
-        <td style="text-align:right;padding:3px 4px;color:${descuento>0?'#A32D2D':'inherit'}">${desc}</td>
-        <td style="text-align:right;padding:3px 4px;font-weight:bold">S/${item.total.toFixed(2)}</td>
-      </tr>`;
+      const nombreItem=item.nombre+(item.label?' ('+item.label+')':'');
+      contenido+=`<div style="margin-bottom:7px">
+        <div style="font-weight:700;font-size:16px">${nombreItem}</div>
+        <div style="display:flex;justify-content:space-between;font-size:15px">
+          <span>${cant}${esSimple?'':' x S/'+item.precio.toFixed(2)}</span>
+          <span style="font-weight:900;font-size:17px">S/${item.total.toFixed(2)}</span>
+        </div>
+        ${descuento>0?`<div style="font-size:13px;color:#000">Descuento aplicado: -S/${descuento.toFixed(2)}</div>`:''}
+      </div>`;
     });
-    contenido+='</tbody></table>';
   } else {
-    // fallback texto plano
-    contenido+=`<div style="margin:8px 0">${p.items}</div>`;
+    contenido+=`<div style="margin:8px 0;font-size:15px">${p.items}</div>`;
   }
   contenido+=`
-    <div>─────────────────────────────────</div>
-    <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:bold;margin:8px 0">
+    <div style="border-top:2px dashed #000;margin:8px 0"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:24px;font-weight:900;margin:10px 0">
       <span>TOTAL:</span><span>S/ ${rd2(p.total).toFixed(2)}</span>
     </div>
-    <div>─────────────────────────────────</div>
-    <div style="text-align:center;margin-top:10px;font-size:12px">
-      <div>🙏 ¡Gracias por su compra!</div>
+    <div style="border-top:3px solid #000;margin:8px 0"></div>
+    <div style="text-align:center;margin-top:12px;font-size:15px;line-height:1.5">
+      <div style="font-weight:700">¡Gracias por su compra!</div>
       <div>Que tenga un excelente día.</div>
-      <div>¡Vuelva pronto, Don Henry</div>
-      <div>siempre tiene lo mejor para usted! 🌟</div>
+      <div style="margin-top:6px;font-weight:700">¡Vuelva pronto, Don Henry</div>
+      <div style="font-weight:700">siempre tiene lo mejor para usted!</div>
     </div>
+    <div style="height:30px"></div>
     </div>`;
   const w=window.open('','_blank','width=500,height=700');
-  w.document.write(`<!DOCTYPE html><html><head><title>Boleta #${p.id}</title><style>@media print{body{margin:0}}</style></head><body>${contenido}<script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.write(`<!DOCTYPE html><html><head><title>Boleta #${p.id}</title><meta charset="utf-8"><style>@page{margin:0}@media print{body{margin:0}}body{margin:0}</style></head><body>${contenido}<script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 }
 async function dPed(id){if(!confirm('¿Eliminar pedido?'))return;await sb.from('pedidos').delete().eq('id',id);pedidos=pedidos.filter(p=>p.id!==id);rPeds();}
