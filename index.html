@@ -1622,34 +1622,51 @@ function fCalcT(k){const uM={q:3,m:6,d:12,cj:fCajU()};const uds=uM[k];const tot=
 function fRec(){['q','m','d','cj'].forEach(k=>{if(document.getElementById('fdc-'+k)?.checked){const dt=parseFloat(document.getElementById('fdt-'+k)?.value)||0;if(dt>0)fCalcT(k);}});const l=document.getElementById('flbl-cj');if(l)l.textContent=`Precio total (${fCajU()} u.) S/`;}
 function fTogD(k){const chk=document.getElementById('fdc-'+k);const blk=document.getElementById('fdb-'+k);const body=document.getElementById('fdbi-'+k);const sub=document.getElementById('fds-'+k);if(!chk||!blk||!body||!sub)return;const on=chk.checked;blk.classList.toggle('on',on);body.classList.toggle('vis',on);const uM={q:3,m:6,d:12,cj:fCajU()};sub.textContent=`${uM[k]} u. — ${on?'activo':'inactivo'}`;}
 function buildSubcatHtml(p){
-  const subs = p?.subcategoria ? p.subcategoria.split('|').filter(Boolean) : ['','','',''];
-  while(subs.length < 4) subs.push('');
+  const subs = p?.subcategoria ? p.subcategoria.split('|').filter(Boolean) : [];
+  // Empezar con al menos 2 campos vacíos si no hay ninguna
+  while(subs.length < 2) subs.push('');
+  const phs = ['Ej: Importado','Ej: Nacional','Ej: Granel','Ej: Envasado','Ej: Premium','Ej: Oferta'];
+  const rows = subs.map(function(s,i){
+    return '<div class="subcat-row" style="display:flex;gap:6px;align-items:center">'+
+      '<input type="text" class="subcat-inp" value="'+s+'" placeholder="'+(phs[i]||'Otra subcategoría')+'" style="flex:1;font-size:12px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--txt);outline:none">'+
+      '<button type="button" onclick="this.parentElement.remove()" style="width:28px;height:28px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--txt3);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center" title="Quitar"><i class="ti ti-x" style="font-size:13px"></i></button>'+
+    '</div>';
+  }).join('');
   return [
     '<div style="margin-top:8px">',
       '<div style="font-size:12px;font-weight:600;color:var(--txt2);margin-bottom:6px;display:flex;align-items:center;gap:6px">',
-        '<i class="ti ti-tag" style="font-size:13px;color:var(--g)"></i> Subcategorías <span style="font-size:10px;color:var(--txt3);font-weight:400">(opcional, hasta 4)</span>',
+        '<i class="ti ti-tag" style="font-size:13px;color:var(--g)"></i> Subcategorías <span style="font-size:10px;color:var(--txt3);font-weight:400">(opcional, las que necesites)</span>',
       '</div>',
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">',
-        '<input type="text" id="fp-sub0" value="'+subs[0]+'" placeholder="Ej: Importado" style="font-size:12px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--txt);outline:none">',
-        '<input type="text" id="fp-sub1" value="'+subs[1]+'" placeholder="Ej: Nacional" style="font-size:12px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--txt);outline:none">',
-        '<input type="text" id="fp-sub2" value="'+subs[2]+'" placeholder="Ej: Granel" style="font-size:12px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--txt);outline:none">',
-        '<input type="text" id="fp-sub3" value="'+subs[3]+'" placeholder="Ej: Envasado" style="font-size:12px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--txt);outline:none">',
+      '<div id="subcats-wrap" style="display:flex;flex-direction:column;gap:6px">',
+        rows,
       '</div>',
+      '<button type="button" onclick="addSubcat()" style="margin-top:6px;width:100%;padding:7px;font-size:11px;font-weight:600;border:1px dashed var(--g);border-radius:8px;background:var(--gl);color:var(--gd);cursor:pointer"><i class="ti ti-plus" style="font-size:11px"></i> Agregar otra subcategoría</button>',
     '</div>'
   ].join('');
 }
 
+function addSubcat(){
+  const wrap=document.getElementById('subcats-wrap');if(!wrap)return;
+  const div=document.createElement('div');
+  div.className='subcat-row';
+  div.style.cssText='display:flex;gap:6px;align-items:center';
+  div.innerHTML='<input type="text" class="subcat-inp" placeholder="Otra subcategoría" style="flex:1;font-size:12px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--txt);outline:none">'+
+    '<button type="button" onclick="this.parentElement.remove()" style="width:28px;height:28px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--txt3);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center" title="Quitar"><i class="ti ti-x" style="font-size:13px"></i></button>';
+  wrap.appendChild(div);
+  div.querySelector('input')?.focus();
+}
+
 function actuSubcats(){
   // Al cambiar categoría, limpiar subcategorías
-  ['fp-sub0','fp-sub1','fp-sub2','fp-sub3'].forEach(function(id){
-    const el=document.getElementById(id);
-    if(el)el.value='';
-  });
+  const wrap=document.getElementById('subcats-wrap');
+  if(wrap)wrap.querySelectorAll('.subcat-inp').forEach(el=>el.value='');
 }
 
 function getSubcatValue(){
-  const vals=['fp-sub0','fp-sub1','fp-sub2','fp-sub3']
-    .map(function(id){const el=document.getElementById(id);return el?el.value.trim():'';})
+  const wrap=document.getElementById('subcats-wrap');
+  if(!wrap)return'';
+  const vals=Array.from(wrap.querySelectorAll('.subcat-inp'))
+    .map(el=>el.value.trim())
     .filter(Boolean);
   return vals.join('|');
 }
