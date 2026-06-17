@@ -1569,8 +1569,8 @@ function rProds(q=''){
   let lista=prods;
   if(q){lista=lista.filter(p=>matchQ(p.nombre+' '+p.cat+' '+(p.subcategoria||''),q));}
   // Aplicar filtro de stock
-  if(filtStock==='bajo')lista=lista.filter(p=>p.tipo==='unidad'&&p.stock>0&&p.stock<=STOCK_MIN);
-  else if(filtStock==='sin')lista=lista.filter(p=>p.tipo==='unidad'&&p.stock===0);
+  if(filtStock==='bajo')lista=lista.filter(p=>p.stock>0&&p.stock<=STOCK_MIN);
+  else if(filtStock==='sin')lista=lista.filter(p=>p.stock===0||p.stock==null);
   else if(filtStock==='peso')lista=lista.filter(p=>p.tipo==='peso'||p.tipo==='bolsa');
   if(!lista.length){cont.innerHTML='<div class="empty"><i class="ti ti-package"></i><p>Sin productos</p></div>';return;}
   const tL={unidad:'Por unidad',peso:'Por peso',bolsa:'Bolsas'};
