@@ -1113,7 +1113,10 @@ async function term(){
   if(!carrito.length){alert('El carrito está vacío');return;}
   const total=gT();const hora=new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
   const nom=getNom();const snapshot=[...carrito];
-  const items=carrito.map(i=>i.nombre+(i.qty>1?` × ${i.qty}`:'')).join(', ');
+  const items=carrito.map(i=>{
+    const pres=(i.tag==='bolsa'||i.tag==='saco')&&i.subNombre?' ('+i.subNombre+')':'';
+    return i.nombre+pres+(i.qty>1?` × ${i.qty}`:'');
+  }).join(', ');
   const btn=document.querySelector('.bok');if(btn){btn.disabled=true;btn.innerHTML='<div class="spin"></div> Guardando...';}
   try{
     const items_detalle=snapshot.map(i=>({
@@ -1395,7 +1398,9 @@ function imprimirBoleta(id){
       const precioBase=item.precioBase||item.precio;
       const descuento=esSimple?0:rd2((precioBase-item.precio)*item.qty);
       const cant=item.tag==='g'?(item.subNombre||item.qty):item.qty;
-      const nombreItem=item.nombre+(item.label?' ('+item.label+')':'');
+      // Para bolsas/sacos, incluir la presentación (subNombre); para granel ya va en cant
+      const presentacion=(item.tag==='bolsa'||item.tag==='saco')&&item.subNombre?' — '+item.subNombre:'';
+      const nombreItem=item.nombre+presentacion+(item.label?' ('+item.label+')':'');
       contenido+=`<div style="margin-bottom:7px">
         <div style="font-weight:700;font-size:16px">${nombreItem}</div>
         <div style="display:flex;justify-content:space-between;font-size:15px">
