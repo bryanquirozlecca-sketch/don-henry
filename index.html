@@ -387,6 +387,28 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
       <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Cliente</div>
       <div class="cli-row"><select id="cli-sel2" onchange="camCli2()"><option value="">Sin cliente registrado</option></select><span class="ctag" id="ctag2" style="display:none"><i class="ti ti-star" style="font-size:10px"></i> Casero</span></div>
       <input class="nc-inp" id="nc-inp2" type="text" placeholder="O escribe el nombre..." style="margin-top:6px;width:100%" oninput="onNC2(this.value)">
+      <button onclick="abrirNuevoCliCaja()" style="margin-top:7px;width:100%;padding:8px;font-size:12px;font-weight:600;border:1px dashed var(--g);background:var(--gl);color:var(--gd);border-radius:9px;cursor:pointer"><i class="ti ti-user-plus" style="font-size:12px;vertical-align:-1px"></i> Registrar cliente nuevo</button>
+    </div>
+    <!-- Modal registrar cliente desde caja -->
+    <div id="modal-nuevo-cli-caja" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;padding:20px">
+      <div style="background:var(--card);border-radius:16px;padding:18px;max-width:380px;width:100%;max-height:85vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div style="font-size:15px;font-weight:700;color:var(--txt)">Registrar cliente nuevo</div>
+          <button onclick="cerrarNuevoCliCaja()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3)">&times;</button>
+        </div>
+        <div class="ff">
+          <label>Nombre *</label>
+          <input type="text" id="ncc-nombre" placeholder="Nombre del cliente">
+          <label>Teléfono</label>
+          <input type="text" id="ncc-tel" placeholder="Opcional">
+          <label>Dirección</label>
+          <input type="text" id="ncc-dir" placeholder="Opcional">
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
+            <input type="checkbox" id="ncc-casero" style="width:auto"> Es casero (cliente frecuente)
+          </label>
+        </div>
+        <button class="bsv" onclick="guardarNuevoCliCaja()" style="margin-top:14px"><i class="ti ti-check"></i> Registrar y seleccionar</button>
+      </div>
     </div>
     <!-- Items -->
     <div id="citems" style="margin-bottom:10px"><div class="empty" style="padding:20px 0"><i class="ti ti-basket" style="font-size:28px"></i><p>Agrega productos desde caja</p></div></div>
@@ -1267,6 +1289,44 @@ function onNC2(v){
   ncVal=v.trim();
   const el=document.getElementById('nc-inp2');
   if(el)el.className='nc-inp'+(ncVal?' activo':'');
+}
+function abrirNuevoCliCaja(){
+  document.getElementById('ncc-nombre').value='';
+  document.getElementById('ncc-tel').value='';
+  document.getElementById('ncc-dir').value='';
+  document.getElementById('ncc-casero').checked=false;
+  document.getElementById('modal-nuevo-cli-caja').style.display='flex';
+  setTimeout(()=>document.getElementById('ncc-nombre').focus(),100);
+}
+function cerrarNuevoCliCaja(){
+  document.getElementById('modal-nuevo-cli-caja').style.display='none';
+}
+async function guardarNuevoCliCaja(){
+  const nom=document.getElementById('ncc-nombre').value.trim();
+  if(!nom){alert('Ingresa el nombre del cliente');return;}
+  const datos={
+    nombre:nom,
+    tel:document.getElementById('ncc-tel').value.trim()||'',
+    dir:document.getElementById('ncc-dir').value.trim()||'',
+    casero:document.getElementById('ncc-casero').checked||false,
+    deuda:0
+  };
+  try{
+    const{data,error}=await sb.from('clientes').insert(datos).select().single();
+    if(error)throw error;
+    if(data){
+      clis.push(data);
+      rCliSel();
+      // Seleccionar el cliente recién creado en la caja
+      const sel=document.getElementById('cli-sel2');
+      if(sel){sel.value=data.id;camCli2();}
+      // Limpiar el campo de nombre manual
+      const nc2=document.getElementById('nc-inp2');if(nc2){nc2.value='';ncVal='';nc2.className='nc-inp';}
+    }
+    cerrarNuevoCliCaja();
+  }catch(e){
+    alert('No se pudo registrar el cliente: '+e.message);
+  }
 }
 function actuFAB(){
   const fab=document.getElementById('cart-fab');
