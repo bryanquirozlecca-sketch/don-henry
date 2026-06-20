@@ -352,9 +352,9 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
       </button>
     </div>
   </div>
-  <div class="cats" id="cats"></div>
-  <div id="subcats" style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap"></div>
-  <div class="pgrid" id="pgrid"><div class="loading"><div class="spin"></div> Cargando productos...</div></div>
+  <div class="cats" id="cats" style="display:none"></div>
+  <div id="subcats" style="display:none;gap:5px;margin-bottom:8px;flex-wrap:wrap"></div>
+  <div class="pgrid" id="pgrid"></div>
   <!-- Botón flotante del carrito -->
   <div id="cart-fab" onclick="abrirCarrito()" style="display:none;position:fixed;bottom:80px;right:16px;z-index:200;background:var(--g);color:#fff;border-radius:50px;padding:12px 18px;box-shadow:0 4px 16px rgba(29,158,117,.4);cursor:pointer;font-size:13px;font-weight:700;align-items:center;gap:8px">
     <i class="ti ti-shopping-cart" style="font-size:18px"></i>
@@ -782,10 +782,15 @@ function rP(){
   // Mostrar/ocultar botón borrar
   const clrBtn=document.getElementById('srch-clear');
   if(clrBtn)clrBtn.style.display=rawQ?'flex':'none';
-  const f=prods.filter(p=>(catA==='Todos'||p.cat===catA)&&(subcatA==='Todos'||(p.subcategoria||'').split('|').filter(Boolean).includes(subcatA))&&matchQ(p.nombre+' '+p.cat+' '+(p.subcategoria||''),q));
   const g=document.getElementById('pgrid');if(!g)return;
-  if(!f.length){g.innerHTML='<div class="empty" style="grid-column:1/-1;padding:20px 0"><i class="ti ti-search"></i><p>Sin resultados</p></div>';return;}
-  g.innerHTML=f.map(p=>{const sc=scClase(p);const imgH=p.imagen_url?`<img src="${p.imagen_url}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'';const emoH=p.imagen_url?`<span style="display:none;font-size:32px;width:100%;height:100%;align-items:center;justify-content:center">${getCatEmoji(p.cat)}</span>`:`<span style="font-size:32px">${getCatEmoji(p.cat)}</span>`;return`<div class="pc${(EU[p.id]?.inc||anyItemOn(p.id))?' inc':''}${p.stock===0?' ns':''}" id="pc-${p.id}"><div class="ph">${imgH}${emoH}<span class="stock-mini ${sc}" style="position:absolute;top:5px;right:7px;z-index:2">${p.tipo==='unidad'?p.stock:'∞'}</span></div><div class="pb" id="pb-${p.id}"></div></div>`;}).join('');
+  // Si no hay búsqueda, no cargar productos (mejora velocidad con 700+ productos)
+  if(!rawQ.trim()){
+    g.innerHTML='<div class="empty" style="grid-column:1/-1;padding:40px 20px"><i class="ti ti-search" style="font-size:42px;color:var(--g)"></i><p style="font-size:14px;font-weight:600;color:var(--txt)">Busca un producto</p><small style="font-size:12px;color:var(--txt3);display:block;margin-top:4px">Escribe el nombre del producto<br>que quieres vender</small></div>';
+    return;
+  }
+  const f=prods.filter(p=>matchQ(p.nombre+' '+p.cat+' '+(p.subcategoria||''),q));
+  if(!f.length){g.innerHTML='<div class="empty" style="grid-column:1/-1;padding:20px 0"><i class="ti ti-search"></i><p>Sin resultados para "'+rawQ+'"</p></div>';return;}
+  g.innerHTML=f.map(p=>{const sc=scClase(p);const imgH=p.imagen_url?`<img src="${p.imagen_url}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'';const emoH=p.imagen_url?`<span style="display:none;font-size:32px;width:100%;height:100%;align-items:center;justify-content:center">${getCatEmoji(p.cat)}</span>`:`<span style="font-size:32px">${getCatEmoji(p.cat)}</span>`;return`<div class="pc${(EU[p.id]?.inc||anyItemOn(p.id))?' inc':''}${p.stock===0?' ns':''}" id="pc-${p.id}"><div class="ph">${imgH}${emoH}<span class="stock-mini ${sc}" style="position:absolute;top:5px;right:7px;z-index:2">${p.tipo==='unidad'?p.stock:'∞'}</span></div><div class="pb" id="pb-${p.id}"></div></div>`;}).join('');
   f.forEach(p=>buildCard(p.id));
 }
 
@@ -1216,7 +1221,8 @@ function rPeds(){
         onchange="guardarNotaPed(${p.id},this.value)" onfocus="this.style.borderColor='var(--a)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div class="pa">
-      <button class="bpr" onclick="imprimirBoleta(${p.id})"><i class="ti ti-printer" style="font-size:11px"></i> Imprimir</button>
+      <button class="bpr" onclick="imprimirBoleta(${p.id})"><i class="ti ti-printer" style="font-size:11px"></i> Boleta</button>
+      <button style="flex:1;padding:5px;font-size:11px;border-radius:8px;cursor:pointer;font-weight:600;border:1px solid var(--g);background:transparent;color:var(--gd)" onclick="imprimirSoloPrecios(${p.id})"><i class="ti ti-list" style="font-size:11px"></i> Solo precios</button>
       <button style="flex:1;padding:5px;font-size:11px;border-radius:8px;cursor:pointer;font-weight:600;border:1px solid #85B7EB;background:transparent;color:var(--b)" onclick="editarPed(${p.id})"><i class="ti ti-edit" style="font-size:11px"></i> Editar</button>
       <button class="bdl2" onclick="dPed(${p.id})"><i class="ti ti-trash" style="font-size:11px"></i> Eliminar</button>
     </div>
@@ -1431,7 +1437,45 @@ function imprimirBoleta(id){
   w.document.write(`<!DOCTYPE html><html><head><title>Boleta #${p.id}</title><meta charset="utf-8"><style>@page{margin:0}@media print{body{margin:0}}body{margin:0}</style></head><body>${contenido}<script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 }
-async function dPed(id){if(!confirm('¿Eliminar pedido?'))return;await sb.from('pedidos').delete().eq('id',id);pedidos=pedidos.filter(p=>p.id!==id);rPeds();}
+
+function imprimirSoloPrecios(id){
+  const p=pedidos.find(x=>x.id===id);if(!p)return;
+  const detalles=p.items_detalle||[];
+  let contenido=`
+    <div style="font-family:'Courier New',monospace;font-size:17px;line-height:1.4;padding:8px;color:#000;font-weight:600">`;
+  if(detalles.length){
+    detalles.forEach(item=>{
+      const esSimple=item.tag!=='u';
+      const cant=item.tag==='g'?(item.subNombre||item.qty):item.qty;
+      const presentacion=(item.tag==='bolsa'||item.tag==='saco')&&item.subNombre?' — '+item.subNombre:'';
+      const nombreItem=item.nombre+presentacion+(item.label?' ('+item.label+')':'');
+      contenido+=`<div style="margin-bottom:6px">
+        <div style="font-weight:700;font-size:16px">${nombreItem}</div>
+        <div style="display:flex;justify-content:space-between;font-size:16px">
+          <span>${cant}${esSimple?'':' x S/'+item.precio.toFixed(2)}</span>
+          <span style="font-weight:900;font-size:18px">S/${item.total.toFixed(2)}</span>
+        </div>
+      </div>`;
+    });
+  } else {
+    contenido+=`<div style="margin:8px 0;font-size:15px">${p.items}</div>`;
+  }
+  contenido+=`
+    <div style="border-top:2px dashed #000;margin:8px 0"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:24px;font-weight:900;margin:8px 0">
+      <span>TOTAL:</span><span>S/ ${rd2(p.total).toFixed(2)}</span>
+    </div>
+    <div style="border-top:3px solid #000;margin:8px 0"></div>
+    <div style="text-align:center;margin-top:10px;font-size:15px;line-height:1.5">
+      <div style="font-weight:700">¡Gracias por su compra!</div>
+      <div>Que tenga un excelente día.</div>
+    </div>
+    <div style="height:30px"></div>
+    </div>`;
+  const w=window.open('','_blank','width=500,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><title>Precios #${p.id}</title><meta charset="utf-8"><style>@page{margin:0}@media print{body{margin:0}}body{margin:0}</style></head><body>${contenido}<script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+}
 
 // ── DEUDAS ────────────────────────────────────────────────────────────────────
 async function loadDeudas(){const{data}=await sb.from('deudas').select('*').order('created_at',{ascending:false});deudas=data||[];}
