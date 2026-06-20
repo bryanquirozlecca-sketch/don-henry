@@ -439,9 +439,14 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
 
 <!-- PEDIDOS -->
 <div id="s-pedidos" class="scr">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px">
+    <i class="ti ti-calendar" style="font-size:18px;color:var(--g)"></i>
+    <input type="date" id="ped-fecha-sel" onchange="cambiarFechaPedidos(this.value)" style="flex:1;font-size:14px;font-weight:600;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--txt);outline:none">
+    <button onclick="pedidosHoy()" style="padding:6px 12px;font-size:12px;font-weight:600;border:1px solid var(--g);background:var(--gl);color:var(--gd);border-radius:8px;cursor:pointer;white-space:nowrap">Hoy</button>
+  </div>
   <div class="stg2">
-    <div class="sc"><div class="sl">Pedidos hoy</div><div class="sv" id="spc">0</div></div>
-    <div class="sc"><div class="sl">Total del día</div><div class="sv" style="color:var(--g)" id="spt">S/0.00</div></div>
+    <div class="sc"><div class="sl" id="spc-lbl">Pedidos del día</div><div class="sv" id="spc">0</div></div>
+    <div class="sc"><div class="sl">Total</div><div class="sv" style="color:var(--g)" id="spt">S/0.00</div></div>
   </div>
   <div id="ped-list"><div class="loading"><div class="spin"></div> Cargando...</div></div>
 </div>
@@ -611,10 +616,26 @@ async function loadAll(){
   }catch(err){setConn(false);console.error(err);}
 }
 
+let fechaPedidosSel=null; // null = hoy
 async function loadPedidosHoy(){
-  const hoy=new Date().toISOString().split('T')[0];
-  const{data}=await sb.from('pedidos').select('*').eq('fecha',hoy).order('created_at',{ascending:false});
+  const fecha=fechaPedidosSel||new Date().toISOString().split('T')[0];
+  const{data}=await sb.from('pedidos').select('*').eq('fecha',fecha).order('created_at',{ascending:false});
   pedidos=data||[];
+}
+function cambiarFechaPedidos(fecha){
+  if(!fecha)return;
+  fechaPedidosSel=fecha;
+  const lbl=document.getElementById('spc-lbl');
+  const hoy=new Date().toISOString().split('T')[0];
+  if(lbl)lbl.textContent=fecha===hoy?'Pedidos del día':'Pedidos del '+fecha;
+  loadPedidosHoy().then(rPeds);
+}
+function pedidosHoy(){
+  fechaPedidosSel=null;
+  const hoy=new Date().toISOString().split('T')[0];
+  const sel=document.getElementById('ped-fecha-sel');if(sel)sel.value=hoy;
+  const lbl=document.getElementById('spc-lbl');if(lbl)lbl.textContent='Pedidos del día';
+  loadPedidosHoy().then(rPeds);
 }
 
 // ── STOCK ─────────────────────────────────────────────────────────────────────
@@ -1150,7 +1171,7 @@ async function term(){
       tag:i.tag,
       total:getItemSubtotal(i)
     }));
-    const{error,data:pedidoNuevo}=await sb.from('pedidos').insert({cliente_nombre:nom,cliente_id:cliA.id||null,items,items_detalle,total,pago:pagoA,hora,fecha:new Date().toISOString().split('T')[0],nota:''}).select().single();
+    const{error,data:pedidoNuevo}=await sb.from('pedidos').insert({cliente_nombre:nom,cliente_id:cliA.id||null,items,items_detalle,total,pago:pagoA,hora,fecha:new Date().toISOString().split('T')[0],nota:'',vendedor_id:usuarioActual?.id||null,vendedor_nombre:usuarioActual?.nombre||''}).select().single();
     if(error)throw error;
     if(cliA.id){
       // Actualizar historial y totales del cliente
@@ -1223,6 +1244,7 @@ function rPeds(){
       <div>
         <div style="font-size:12px;font-weight:700;color:var(--txt)">Pedido #${p.id} — ${p.cliente_nombre}</div>
         <div style="font-size:11px;color:var(--txt2)">${p.fecha||''} ${p.hora||''}</div>
+        ${p.vendedor_nombre?`<div style="font-size:10px;color:var(--txt3);margin-top:1px"><i class="ti ti-user" style="font-size:9px;vertical-align:-1px"></i> Atendió: ${p.vendedor_nombre}</div>`:''}
       </div>
       <div style="text-align:right">
         <div style="font-size:15px;font-weight:700;color:var(--g)">S/${rd2(p.total).toFixed(2)}</div>
@@ -2495,7 +2517,12 @@ async function go(name,btn){
   if(btn)btn.classList.add('on');
   if(name==='clientes')rClis();
   if(name==='productos'){mSProd(true,false);rProds();}
-  if(name==='pedidos'){await loadPedidosHoy();rPeds();}
+  if(name==='pedidos'){
+    const sel=document.getElementById('ped-fecha-sel');
+    const hoy=new Date().toISOString().split('T')[0];
+    if(sel&&!sel.value)sel.value=fechaPedidosSel||hoy;
+    await loadPedidosHoy();rPeds();
+  }
   if(name==='deudas'){await loadDeudas();rDeu();}
   if(name==='compras')rListaCompras();
   if(name==='faltantes')rFaltantes();
