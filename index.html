@@ -2479,7 +2479,77 @@ async function cargarPerfil(user){
     return;
   }
   usuarioActual={id:user.id,email:user.email,nombre:rol.nombre,rol:rol.rol};
+  // Control de sesión única (solo cuentas que NO son admin)
+  if(rol.rol!=='admin'){
+    const ok=await verificarSesionUnica(user.id);
+    if(!ok){
+      usuarioActual=null;
+      await sb.auth.signOut();
+      const btn=document.getElementById('login-btn');
+      if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-login"></i> Ingresar';}
+      return;
+    }
+    // Iniciar heartbeat para mantener la sesión viva
+    iniciarHeartbeat(user.id);
+  }
   await mostrarApp();
+}
+
+// ── SESIÓN ÚNICA ──────────────────────────────────────────────────────────────
+let _deviceId=null;
+let _heartbeatTimer=null;
+function getDeviceId(){
+  if(_deviceId)return _deviceId;
+  // Generar/recuperar un ID único de este dispositivo
+  let id=null;
+  try{id=window.name&&window.name.startsWith('dh_')?window.name:null;}catch(e){}
+  if(!id){
+    id='dh_'+Date.now()+'_'+Math.random().toString(36).slice(2,10);
+    try{window.name=id;}catch(e){}
+  }
+  _deviceId=id;
+  return id;
+}
+async function verificarSesionUnica(userId){
+  const deviceId=getDeviceId();
+  const ahora=Date.now();
+  const LIMITE_MS=120000; // 2 minutos sin latido = sesión muerta
+  // Buscar sesión activa existente
+  const{data:sesion}=await sb.from('sesiones_activas').select('*').eq('user_id',userId).maybeSingle();
+  if(sesion){
+    const ultimoLatido=new Date(sesion.ultimo_latido).getTime();
+    const viva=(ahora-ultimoLatido)<LIMITE_MS;
+    // Si está viva y es OTRO dispositivo, bloquear
+    if(viva&&sesion.device_id!==deviceId){
+      mostrarErr('Esta cuenta ya está abierta en otro dispositivo. Cierra sesión ahí primero o pide al administrador que la libere.');
+      return false;
+    }
+  }
+  // Registrar/actualizar esta sesión como la activa
+  const info=navigator.userAgent.substring(0,120);
+  await sb.from('sesiones_activas').upsert({
+    user_id:userId,
+    device_id:deviceId,
+    device_info:info,
+    ultimo_latido:new Date().toISOString(),
+    iniciado:new Date().toISOString()
+  });
+  return true;
+}
+function iniciarHeartbeat(userId){
+  if(_heartbeatTimer)clearInterval(_heartbeatTimer);
+  const deviceId=getDeviceId();
+  // Actualizar latido cada 45 segundos
+  _heartbeatTimer=setInterval(async()=>{
+    try{
+      await sb.from('sesiones_activas').update({ultimo_latido:new Date().toISOString()}).eq('user_id',userId).eq('device_id',deviceId);
+    }catch(e){}
+  },45000);
+}
+async function liberarSesionPropia(){
+  if(!usuarioActual||usuarioActual.rol==='admin')return;
+  if(_heartbeatTimer)clearInterval(_heartbeatTimer);
+  try{await sb.from('sesiones_activas').delete().eq('user_id',usuarioActual.id);}catch(e){}
 }
 
 async function mostrarApp(){
@@ -2540,6 +2610,8 @@ function ajustarNav(){
 
 async function doLogout(){
   if(!confirm('¿Cerrar sesión?'))return;
+  // Liberar sesión única antes de salir
+  await liberarSesionPropia();
   await sb.auth.signOut();
   usuarioActual=null;
   document.getElementById('login-screen').classList.remove('hide');
@@ -2555,6 +2627,14 @@ async function doLogout(){
 async function rCuentas(){
   const cont=document.getElementById('cuentas-content');if(!cont)return;
   const{data:cuentas}=await sb.from('roles_usuario').select('*').order('created_at');
+  // Cargar sesiones activas
+  const{data:sesiones}=await sb.from('sesiones_activas').select('*');
+  const ahora=Date.now();
+  const sesionMap={};
+  (sesiones||[]).forEach(s=>{
+    const viva=(ahora-new Date(s.ultimo_latido).getTime())<120000;
+    sesionMap[s.user_id]={viva,info:s.device_info||''};
+  });
   const rolLbl={admin:'Admin',atencion:'Atención',cliente:'Cliente'};
   const rolCls={admin:'rol-admin',atencion:'rol-atencion',cliente:'rol-cliente'};
   cont.innerHTML=`
@@ -2565,7 +2645,10 @@ async function rCuentas(){
     <span>Crea cuentas para cada persona de la tienda. <strong>Admin</strong> ve todo, <strong>Atención</strong> solo caja y pedidos, <strong>Cliente</strong> solo la vitrina.</span>
   </div>
   <div id="lista-cuentas">
-    ${(cuentas||[]).map(c=>`
+    ${(cuentas||[]).map(c=>{
+      const ses=sesionMap[c.id];
+      const enUso=ses&&ses.viva&&c.rol!=='admin';
+      return `
     <div class="cuenta-card">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="width:40px;height:40px;border-radius:50%;background:${c.activo===false?'var(--rl)':'var(--bg)'};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;color:${c.activo===false?'var(--r)':'var(--txt2)'}">${c.nombre[0].toUpperCase()}</div>
@@ -2576,20 +2659,29 @@ async function rCuentas(){
           </div>
           <div style="font-size:11px;color:var(--txt2)">${c.email}</div>
           <div style="font-size:10px;margin-top:2px;color:${c.activo===false?'var(--r)':'var(--g)'};font-weight:600">${c.activo===false?'⛔ Acceso desactivado':'✓ Acceso activo'}</div>
+          ${enUso?`<div style="font-size:10px;margin-top:2px;color:#F59E0B;font-weight:600"><i class="ti ti-device-mobile" style="font-size:9px;vertical-align:-1px"></i> Sesión activa en un dispositivo</div>`:''}
         </div>
         <!-- Toggle activo -->
         <div onclick="togCuentaActivo('${c.id}',${c.activo!==false})" style="width:38px;height:22px;border-radius:20px;background:${c.activo!==false?'var(--g)':'var(--border)'};position:relative;cursor:pointer;flex-shrink:0;transition:background .2s">
           <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;${c.activo!==false?'right:2px':'left:2px'};transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
         </div>
       </div>
+      ${enUso?`<button onclick="liberarSesionCuenta('${c.id}','${c.nombre}')" style="width:100%;margin-bottom:8px;padding:7px;font-size:11px;font-weight:600;border:1px solid #F59E0B;background:#FEF3C7;color:#B45309;border-radius:8px;cursor:pointer"><i class="ti ti-lock-open" style="font-size:11px"></i> Liberar sesión (forzar cierre)</button>`:''}
       <div class="act-row">
         <button class="bed" onclick="abrirFCuenta('${c.id}','${c.nombre}','${c.email}','${c.rol}')"><i class="ti ti-edit" style="font-size:11px"></i> Editar</button>
         <button class="bdl" onclick="elimCuenta('${c.id}','${c.nombre}')"><i class="ti ti-trash" style="font-size:11px"></i> Eliminar</button>
       </div>
-    </div>`).join('')}
+    </div>`;}).join('')}
     ${!(cuentas||[]).length?'<div class="empty"><i class="ti ti-users"></i><p>Sin cuentas creadas</p></div>':''}
   </div>
   <div id="form-cuenta" style="display:none"></div>`;
+}
+
+async function liberarSesionCuenta(id,nombre){
+  if(!confirm(`¿Liberar la sesión de "${nombre}"? Podrá iniciar sesión de nuevo en cualquier dispositivo.`))return;
+  await sb.from('sesiones_activas').delete().eq('user_id',id);
+  toastEl('cuentas-toast','cuentas-toast-txt','Sesión de '+nombre+' liberada');
+  await rCuentas();
 }
 
 function abrirFCuenta(id='',nombre='',email='',rol='atencion'){
@@ -2787,6 +2879,15 @@ sb.auth.onAuthStateChange((event,session)=>{
   if(event==='SIGNED_OUT'){
     document.getElementById('login-screen').classList.remove('hide');
     document.getElementById('app-screen').classList.remove('show');
+  }
+});
+// Liberar sesión al cerrar la pestaña (reduce sesiones fantasma)
+window.addEventListener('beforeunload',()=>{
+  if(usuarioActual&&usuarioActual.rol!=='admin'&&_deviceId){
+    try{
+      const url=SURL+'/rest/v1/sesiones_activas?user_id=eq.'+usuarioActual.id;
+      fetch(url,{method:'DELETE',headers:{'apikey':SKEY,'Authorization':'Bearer '+SKEY},keepalive:true});
+    }catch(e){}
   }
 });
 </script>
