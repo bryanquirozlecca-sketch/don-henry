@@ -42,6 +42,13 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
 .cuenta-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:9px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 /* FALTANTES */
 .falt-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:13px 15px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);transition:all .3s;position:relative;overflow:hidden}
+.stat-period{padding:7px 14px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--card);color:var(--txt2);border-radius:20px;cursor:pointer;transition:all .15s}
+.stat-period.on{background:var(--g);color:#fff;border-color:var(--g)}
+.stat-big-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.stat-rank-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--border)}
+.stat-rank-row:last-child{border-bottom:none}
+.stat-rank-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;color:#fff}
+.stat-section-title{font-size:14px;font-weight:700;color:var(--txt);margin-bottom:10px;display:flex;align-items:center;gap:7px}
 .falt-card.marcado{opacity:.55;border-style:dashed;border-color:var(--g);background:var(--gl)}
 .falt-card .prog-bar{position:absolute;bottom:0;left:0;height:3px;background:var(--g);border-radius:0 0 14px 14px;transition:width 1s linear}
 .falt-check{width:26px;height:26px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:var(--bg);transition:all .2s}
@@ -338,6 +345,7 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
   <button class="nb" id="nb-compras" onclick="go('compras',this)"><i class="ti ti-clipboard-list"></i><span>Compras</span></button>
   <button class="nb" id="nb-faltantes" onclick="go('faltantes',this)"><i class="ti ti-writing"></i><span>Almacén</span></button>
   <button class="nb" onclick="go('empleados',this)"><i class="ti ti-users-group"></i><span>Empls.</span></button>
+  <button class="nb" id="nb-estadisticas" onclick="go('estadisticas',this)"><i class="ti ti-chart-bar"></i><span>Stats</span></button>
 </div>
 
 <!-- CAJA -->
@@ -500,6 +508,22 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
   <div id="falt-lista"></div>
 </div>
 
+<!-- ESTADÍSTICAS -->
+<div id="s-estadisticas" class="scr">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <div style="font-size:17px;font-weight:800;color:var(--txt)">📊 Estadísticas</div>
+  </div>
+  <div style="font-size:12px;color:var(--txt2);margin-bottom:12px">Resumen de ventas de Don Henry</div>
+  <!-- Filtros de período -->
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="stat-period on" data-period="hoy" onclick="setPeriodoStats('hoy')">Hoy</button>
+    <button class="stat-period" data-period="semana" onclick="setPeriodoStats('semana')">Esta semana</button>
+    <button class="stat-period" data-period="mes" onclick="setPeriodoStats('mes')">Este mes</button>
+    <button class="stat-period" data-period="todo" onclick="setPeriodoStats('todo')">Todo</button>
+  </div>
+  <div id="stats-content"><div class="loading"><div class="spin"></div> Cargando estadísticas...</div></div>
+</div>
+
 <!-- EMPLEADOS -->
 <div id="s-empleados" class="scr">
   <div id="t-empl">
@@ -637,6 +661,144 @@ function pedidosHoy(){
   const lbl=document.getElementById('spc-lbl');if(lbl)lbl.textContent='Pedidos del día';
   loadPedidosHoy().then(rPeds);
 }
+
+// ── ESTADÍSTICAS ──────────────────────────────────────────────────────────────
+let periodoStats='hoy';
+function setPeriodoStats(p){
+  periodoStats=p;
+  document.querySelectorAll('.stat-period').forEach(b=>b.classList.toggle('on',b.dataset.period===p));
+  cargarEstadisticas();
+}
+function rangoFechas(periodo){
+  const hoy=new Date();
+  const fin=hoy.toISOString().split('T')[0];
+  let ini;
+  if(periodo==='hoy'){ini=fin;}
+  else if(periodo==='semana'){const d=new Date(hoy);d.setDate(d.getDate()-6);ini=d.toISOString().split('T')[0];}
+  else if(periodo==='mes'){const d=new Date(hoy);d.setDate(d.getDate()-29);ini=d.toISOString().split('T')[0];}
+  else{ini='2000-01-01';}
+  return{ini,fin};
+}
+async function cargarEstadisticas(){
+  const cont=document.getElementById('stats-content');if(!cont)return;
+  cont.innerHTML='<div class="loading"><div class="spin"></div> Cargando estadísticas...</div>';
+  const{ini,fin}=rangoFechas(periodoStats);
+  const{data:peds,error}=await sb.from('pedidos').select('*').gte('fecha',ini).lte('fecha',fin);
+  if(error){cont.innerHTML='<div class="empty"><p>Error al cargar estadísticas</p></div>';return;}
+  const pedidosP=peds||[];
+
+  // Resumen general
+  const totalVentas=rd2(pedidosP.reduce((s,p)=>s+rd2(p.total),0));
+  const numPedidos=pedidosP.length;
+  const ticketProm=numPedidos?rd2(totalVentas/numPedidos):0;
+
+  // Productos más vendidos (desde items_detalle)
+  const prodCount={};
+  pedidosP.forEach(p=>{
+    (p.items_detalle||[]).forEach(it=>{
+      const nombre=it.nombre||'Sin nombre';
+      if(!prodCount[nombre])prodCount[nombre]={qty:0,monto:0};
+      const cant=typeof it.qty==='number'?it.qty:1;
+      prodCount[nombre].qty+=cant;
+      prodCount[nombre].monto+=rd2(it.total||0);
+    });
+  });
+  const topProds=Object.entries(prodCount).sort((a,b)=>b[1].qty-a[1].qty).slice(0,8);
+
+  // Clientes que más compran
+  const cliCount={};
+  pedidosP.forEach(p=>{
+    const nombre=p.cliente_nombre||'Sin nombre';
+    if(nombre==='Sin nombre'||nombre==='Sin nombre')return;
+    if(!cliCount[nombre])cliCount[nombre]={compras:0,monto:0};
+    cliCount[nombre].compras++;
+    cliCount[nombre].monto+=rd2(p.total);
+  });
+  const topClis=Object.entries(cliCount).sort((a,b)=>b[1].monto-a[1].monto).slice(0,8);
+
+  // Personal con más ventas
+  const vendCount={};
+  pedidosP.forEach(p=>{
+    const nombre=p.vendedor_nombre;
+    if(!nombre)return;
+    if(!vendCount[nombre])vendCount[nombre]={ventas:0,monto:0};
+    vendCount[nombre].ventas++;
+    vendCount[nombre].monto+=rd2(p.total);
+  });
+  const topVend=Object.entries(vendCount).sort((a,b)=>b[1].ventas-a[1].ventas);
+
+  const colores=['#1D9E75','#3B82F6','#F59E0B','#8B5CF6','#EF4444','#14B8A6','#EC4899','#64748B'];
+
+  let html='';
+  // Resumen
+  html+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:14px">
+    <div class="stat-big-card" style="padding:13px;text-align:center;margin-bottom:0">
+      <div style="font-size:20px;font-weight:800;color:var(--g)">S/${totalVentas.toFixed(2)}</div>
+      <div style="font-size:10px;color:var(--txt2);margin-top:2px">Ventas totales</div>
+    </div>
+    <div class="stat-big-card" style="padding:13px;text-align:center;margin-bottom:0">
+      <div style="font-size:20px;font-weight:800;color:var(--b)">${numPedidos}</div>
+      <div style="font-size:10px;color:var(--txt2);margin-top:2px">Pedidos</div>
+    </div>
+    <div class="stat-big-card" style="padding:13px;text-align:center;margin-bottom:0">
+      <div style="font-size:20px;font-weight:800;color:#8B5CF6">S/${ticketProm.toFixed(2)}</div>
+      <div style="font-size:10px;color:var(--txt2);margin-top:2px">Ticket promedio</div>
+    </div>
+  </div>`;
+
+  // Productos más vendidos
+  html+='<div class="stat-big-card"><div class="stat-section-title"><i class="ti ti-trophy" style="color:#F59E0B"></i> Productos más vendidos</div>';
+  if(topProds.length){
+    html+=topProds.map((e,i)=>{
+      const[nombre,d]=e;
+      return `<div class="stat-rank-row">
+        <div class="stat-rank-num" style="background:${colores[i]||'#64748B'}">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nombre}</div>
+          <div style="font-size:11px;color:var(--txt2)">${d.qty} vendidos · S/${rd2(d.monto).toFixed(2)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }else{html+='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:14px">Sin datos en este período</div>';}
+  html+='</div>';
+
+  // Mejores clientes
+  html+='<div class="stat-big-card"><div class="stat-section-title"><i class="ti ti-star" style="color:#3B82F6"></i> Clientes que más compran</div>';
+  if(topClis.length){
+    html+=topClis.map((e,i)=>{
+      const[nombre,d]=e;
+      return `<div class="stat-rank-row">
+        <div class="stat-rank-num" style="background:${colores[i]||'#64748B'}">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nombre}</div>
+          <div style="font-size:11px;color:var(--txt2)">${d.compras} compra${d.compras>1?'s':''} · S/${rd2(d.monto).toFixed(2)}</div>
+        </div>
+        <div style="font-size:14px;font-weight:800;color:var(--g)">S/${rd2(d.monto).toFixed(2)}</div>
+      </div>`;
+    }).join('');
+  }else{html+='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:14px">Sin clientes registrados en este período</div>';}
+  html+='</div>';
+
+  // Personal
+  html+='<div class="stat-big-card"><div class="stat-section-title"><i class="ti ti-users" style="color:#1D9E75"></i> Ventas por personal</div>';
+  if(topVend.length){
+    html+=topVend.map((e,i)=>{
+      const[nombre,d]=e;
+      return `<div class="stat-rank-row">
+        <div class="stat-rank-num" style="background:${colores[i]||'#64748B'}">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--txt)">${nombre}</div>
+          <div style="font-size:11px;color:var(--txt2)">${d.ventas} venta${d.ventas>1?'s':''} atendida${d.ventas>1?'s':''}</div>
+        </div>
+        <div style="font-size:14px;font-weight:800;color:var(--g)">S/${rd2(d.monto).toFixed(2)}</div>
+      </div>`;
+    }).join('');
+  }else{html+='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:14px">Aún no hay ventas con vendedor registrado en este período.<br>Las nuevas ventas sí lo registrarán.</div>';}
+  html+='</div>';
+
+  cont.innerHTML=html;
+}
+
 
 // ── STOCK ─────────────────────────────────────────────────────────────────────
 function rAlertasStock(){
@@ -1171,9 +1333,19 @@ async function term(){
       tag:i.tag,
       total:getItemSubtotal(i)
     }));
-    const{error,data:pedidoNuevo}=await sb.from('pedidos').insert({cliente_nombre:nom,cliente_id:cliA.id||null,items,items_detalle,total,pago:pagoA,hora,fecha:new Date().toISOString().split('T')[0],nota:'',vendedor_id:usuarioActual?.id||null,vendedor_nombre:usuarioActual?.nombre||''}).select().single();
-    if(error)throw error;
-    if(cliA.id){
+    const fechaHoy=new Date().toISOString().split('T')[0];
+    if(editandoPedidoId){
+      // Modo edición: reemplazar el pedido original, fecha cambia a hoy
+      const{error}=await sb.from('pedidos').update({
+        cliente_nombre:nom,cliente_id:cliA.id||null,items,items_detalle,total,pago:pagoA,hora,fecha:fechaHoy,
+        vendedor_id:usuarioActual?.id||null,vendedor_nombre:usuarioActual?.nombre||''
+      }).eq('id',editandoPedidoId);
+      if(error)throw error;
+    } else {
+      const{error,data:pedidoNuevo}=await sb.from('pedidos').insert({cliente_nombre:nom,cliente_id:cliA.id||null,items,items_detalle,total,pago:pagoA,hora,fecha:fechaHoy,nota:'',vendedor_id:usuarioActual?.id||null,vendedor_nombre:usuarioActual?.nombre||''}).select().single();
+      if(error)throw error;
+    }
+    if(cliA.id&&!editandoPedidoId){
       // Actualizar historial y totales del cliente
       const c=clis.find(x=>x.id===cliA.id);
       if(c){
@@ -1184,11 +1356,14 @@ async function term(){
         await sb.from('clientes').update({total_compras:nuevasCompras,total_gastado:nuevoGasto,ultimo_pedido:c.ultimo_pedido}).eq('id',cliA.id);
       }
     }
-    const{bajos,agotados}=await restarStock(snapshot);
-    let msg=`✅ Pedido guardado\nCliente: ${nom}\nTotal: S/${total.toFixed(2)} | ${PLB[pagoA]}`;
+    const{bajos,agotados}=editandoPedidoId?{bajos:[],agotados:[]}:await restarStock(snapshot);
+    let msg=editandoPedidoId?`✏️ Pedido #${editandoPedidoId} actualizado\nCliente: ${nom}\nTotal: S/${total.toFixed(2)} | ${PLB[pagoA]}`:`✅ Pedido guardado\nCliente: ${nom}\nTotal: S/${total.toFixed(2)} | ${PLB[pagoA]}`;
     if(pagoA==='e'){const rec=parseFloat(document.getElementById('mrec')?.value)||0;msg+=`\nVuelto: S/${rd2(rec-total).toFixed(2)}`;}
     if(agotados.length)msg+=`\n⚠ Sin stock: ${agotados.map(p=>p.nombre).join(', ')}`;
     if(bajos.length)msg+=`\n📉 Stock bajo: ${bajos.map(p=>p.nombre+' ('+p.stock+')').join(', ')}`;
+    // Limpiar modo edición y banner
+    editandoPedidoId=null;
+    const banner=document.getElementById('edit-banner');if(banner)banner.style.display='none';
     // Reset completo del carrito y estado
     carrito=[];cSeq=0;
     prods.forEach(p=>initE(p));faltantes.clear();
@@ -1289,11 +1464,83 @@ async function guardarNotaPed(id,nota){
 // Estado temporal del pedido en edición
 let pedEditItems=[];
 
+let editandoPedidoId=null; // id del pedido en edición, null = venta normal
+
 function editarPed(id){
+  const p=pedidos.find(x=>x.id===id);if(!p)return;
+  if(carrito.length&&!editandoPedidoId){
+    if(!confirm('Tienes productos en el carrito actual. ¿Descartarlos para editar este pedido?'))return;
+  }
+  // Reconstruir el carrito desde el pedido
+  carrito=[];cSeq=0;
+  prods.forEach(pr=>initE(pr));
+  const detalles=p.items_detalle||[];
+  detalles.forEach(it=>{
+    const prod=prods.find(x=>x.id===(it.id||it.prodId)||x.nombre===it.nombre);
+    const k='c'+(++cSeq);
+    const tag=it.tag||'u';
+    carrito.push({
+      cKey:k,
+      prodId:prod?prod.id:null,
+      id:prod?prod.id:null,
+      nombre:it.nombre,
+      subNombre:it.subNombre||'',
+      precio:it.precio||0,
+      qty:it.qty||1,
+      tag:tag,
+      label:it.label||'',
+      nota:'',
+      subtotalExacto:null
+    });
+    // Marcar el producto como incluido para que se vea seleccionado en caja
+    if(prod&&tag==='u'&&EU[prod.id]){EU[prod.id].inc=true;EU[prod.id].cKey=k;EU[prod.id].qty=it.qty||1;}
+  });
+  // Establecer cliente
+  cliA={id:p.cliente_id||null,nombre:p.cliente_nombre||'',casero:false};
+  ncVal=p.cliente_id?'':(p.cliente_nombre||'');
+  pagoA=p.pago||'e';
+  editandoPedidoId=id;
+  // Ir a caja
+  go('caja',document.querySelector('.nb'));
+  mostrarBannerEdicion(id,p.cliente_nombre);
+  rCart();cV();actuFAB();
+}
+
+function mostrarBannerEdicion(id,cliente){
+  let banner=document.getElementById('edit-banner');
+  if(!banner){
+    banner=document.createElement('div');
+    banner.id='edit-banner';
+    banner.style.cssText='background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px';
+    const caja=document.getElementById('s-caja');
+    caja.insertBefore(banner,caja.firstChild);
+  }
+  banner.innerHTML=`<div style="display:flex;align-items:center;gap:8px;min-width:0">
+    <i class="ti ti-edit" style="font-size:18px;color:#B45309;flex-shrink:0"></i>
+    <div style="min-width:0">
+      <div style="font-size:13px;font-weight:700;color:#92400E">Editando pedido #${id}</div>
+      <div style="font-size:11px;color:#B45309;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cliente} · Agrega o quita productos y termina</div>
+    </div>
+  </div>
+  <button onclick="cancelarEdicionPed()" style="padding:6px 12px;font-size:12px;font-weight:600;border:1px solid #F59E0B;background:#fff;color:#B45309;border-radius:8px;cursor:pointer;white-space:nowrap;flex-shrink:0">Cancelar</button>`;
+  banner.style.display='flex';
+}
+
+function cancelarEdicionPed(){
+  editandoPedidoId=null;
+  carrito=[];cSeq=0;
+  prods.forEach(p=>initE(p));
+  cliA={id:null,nombre:'',casero:false};ncVal='';pagoA='e';
+  const banner=document.getElementById('edit-banner');if(banner)banner.style.display='none';
+  rCart();cV();actuFAB();rP();
+  go('pedidos',document.querySelector('.nb'));
+}
+
+// Modal viejo (ya no se usa pero se mantiene por compatibilidad)
+function editarPedModal(id){
   const p=pedidos.find(x=>x.id===id);if(!p)return;
   const m=document.getElementById('modal-ped');if(!m)return;
   const body=document.getElementById('modal-ped-body');
-  // Copia profunda de items_detalle para edición
   pedEditItems=JSON.parse(JSON.stringify(p.items_detalle||[]));
   body.innerHTML=`
     <div class="ff" style="margin-bottom:0">
@@ -1313,11 +1560,9 @@ function editarPed(id){
       <label>Nota interna</label>
       <input type="text" id="ep-nota" value="${(p.nota||'').replace(/"/g,'&quot;')}" placeholder="Ej: cliente pidió factura...">
     </div>
-    <!-- Editar ítems -->
     <div style="margin-top:14px">
       <div style="font-size:12px;font-weight:700;color:var(--txt2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Productos del pedido</div>
       <div id="ep-items-lista"></div>
-      <!-- Agregar producto -->
       <div style="margin-top:10px;background:var(--bg);border-radius:10px;padding:10px;border:1px solid var(--border)">
         <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:7px">Agregar producto</div>
         <div style="display:flex;gap:7px">
@@ -2256,7 +2501,7 @@ function ajustarNav(){
   const rol=usuarioActual?.rol;
   // Tabs visibles por rol
   const permisos={
-    admin:['caja','clientes','productos','pedidos','deudas','compras','empleados','faltantes','cuentas'],
+    admin:['caja','clientes','productos','pedidos','deudas','compras','empleados','faltantes','estadisticas','cuentas'],
     atencion:['caja','pedidos','compras','faltantes'],
     cliente:['vitrina'],
   };
@@ -2529,6 +2774,7 @@ async function go(name,btn){
   if(name==='empleados'){mSEmp(true,false,false);rEmpl();}
   if(name==='categorias')renderCatsList();
   if(name==='cuentas')rCuentas();
+  if(name==='estadisticas')cargarEstadisticas();
 }
 
 // ── INICIO ─────────────────────────────────────────────────────────────────────
