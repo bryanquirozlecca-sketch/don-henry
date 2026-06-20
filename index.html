@@ -2793,9 +2793,17 @@ async function guardarCuenta(id){
   if(btn){btn.disabled=true;btn.innerHTML='<div class="spin"></div> Guardando...';}
   try{
     if(id){
-      // Editar: actualizar rol y nombre
-      await sb.from('roles_usuario').update({nombre,rol}).eq('id',id);
-      toastEl('cuentas-toast','cuentas-toast-txt',`"${nombre}" actualizado`);
+      // Editar: usar Edge Function para actualizar nombre, rol y opcionalmente contraseña
+      const{data:{session}}=await sb.auth.getSession();
+      const token=session?.access_token;
+      const resp=await fetch('https://zfumhtmjluwlbdpzrawc.supabase.co/functions/v1/editar-usuario',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({userId:id,nombre,rol,password:pass||undefined})
+      });
+      const result=await resp.json();
+      if(!result.ok)throw new Error(result.error||'Error al editar cuenta');
+      toastEl('cuentas-toast','cuentas-toast-txt',`"${nombre}" actualizado`+(pass?' (contraseña cambiada)':''));
       cerrarFCuenta();
       await rCuentas();
     } else {
