@@ -1905,13 +1905,45 @@ function quitarImg(){
   if(prev)prev.innerHTML='<i class="ti ti-photo" style="font-size:28px;color:var(--txt3)"></i>';
   const inp=document.getElementById('fp-img');if(inp)inp.value='';
 }
+// Comprime imagen a max 600px ancho y formato webp antes de subir
+function comprimirImagenAntesSubir(file){
+  return new Promise((resolve)=>{
+    // Si ya es pequeña, no comprimir
+    if(file.size<120000){resolve(file);return;}
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const maxW=600;
+      let w=img.width,h=img.height;
+      if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.fillStyle='#FFFFFF';ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img,0,0,w,h);
+      canvas.toBlob(b=>{
+        // Si la compresión no mejoró, usar original
+        resolve(b&&b.size<file.size?b:file);
+      },'image/webp',0.75);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);resolve(file);};
+    img.src=url;
+  });
+}
 async function subirImagen(file,prodId){
-  const ext=file.name.split('.').pop();
+  // Comprimir antes de subir
+  const comprimida=await comprimirImagenAntesSubir(file);
+  // Siempre guardar como .webp ya que comprimimos a ese formato
+  const esWebp=comprimida.type==='image/webp'||comprimida!==file;
+  const ext=esWebp?'webp':file.name.split('.').pop();
   const path=`${prodId}.${ext}`;
-  const{error}=await sb.storage.from('productos').upload(path,file,{upsert:true});
+  const ctype=esWebp?'image/webp':file.type;
+  const{error}=await sb.storage.from('productos').upload(path,comprimida,{upsert:true,contentType:ctype});
   if(error)throw error;
   const{data}=sb.storage.from('productos').getPublicUrl(path);
-  return data.publicUrl;
+  // Cache-busting para que se vea la nueva imagen al instante
+  return data.publicUrl+'?t='+Date.now();
 }
 async function guardarProd(){
   const nom=document.getElementById('fp-n')?.value.trim();if(!nom){alert('Ingresa el nombre');return;}
