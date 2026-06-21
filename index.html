@@ -1061,7 +1061,7 @@ function buildCard(id){
     const pkgTemp=parseFloat(e.precioKgTemp)||0;
     const pkgEf=pkgTemp>0?pkgTemp:(p.precio_kg||0); // precio por kg efectivo
     const tempActivo=pkgTemp>0;
-    h+=`<div style="font-size:11px;color:var(--txt2);margin-bottom:6px;font-weight:500">S/${p.precio_kg?.toFixed(2)||'0.00'}/kg${tempActivo?` <span style="color:var(--a);font-weight:700">→ S/${pkgEf.toFixed(2)}/kg (esta venta)</span>`:''}</div>
+    h+=`<div style="font-size:11px;color:var(--txt2);margin-bottom:6px;font-weight:500">S/${p.precio_kg?.toFixed(2)||'0.00'}/kg<span id="pkg-lbl-${id}">${tempActivo?` <span style="color:var(--a);font-weight:700">→ S/${pkgEf.toFixed(2)}/kg (esta venta)</span>`:''}</span></div>
     <div class="mt"><button class="mb${mG?' on':''}" onclick="sMod(${id},'g')"><i class="ti ti-weight" style="font-size:10px"></i> Gramos</button><button class="mb${!mG?' on':''}" onclick="sMod(${id},'s')"><i class="ti ti-coin" style="font-size:10px"></i> Soles</button></div>`;
     if(mG)h+=`<div class="ir"><input type="number" placeholder="ej: 500" min="0" step="1" value="${e.grams}" id="inp-g-${id}" oninput="onInp(${id},'g',this.value)" onchange="onInpFin(${id},'g',this.value)"><span class="iu">g</span></div><div class="rb"><span class="rl2">A pagar</span><span class="rv" id="rv-g-${id}">${gv>0?'S/'+(gv/1000*pkgEf).toFixed(2):'—'}</span></div>`;
     else h+=`<div class="ir"><input type="number" placeholder="ej: 2.00" min="0" step="0.10" value="${e.soles}" id="inp-s-${id}" oninput="onInp(${id},'s',this.value)" onchange="onInpFin(${id},'s',this.value)"><span class="iu">S/</span></div><div class="rb"><span class="rl2">A pesar</span><span class="rv pu" id="rv-s-${id}">${sv>0?Math.round(sv/(pkgEf||1)*1000)+' g':'—'}</span></div>`;
@@ -1136,17 +1136,22 @@ function pkgEf(id){
 function tPkg(id,on){
   const e=EU[id];if(!e)return;
   if(!on)e.precioKgTemp='';
-  buildCard(id);
-  // Actualizar carrito si ya estaba agregado
-  const tipo=e.modo==='g'?'g':'s';
-  onInpFin(id,tipo,tipo==='g'?e.grams:e.soles);
+  // Mostrar/ocultar el campo directamente sin reconstruir la tarjeta (evita cierre en Android)
+  const inp=document.getElementById(`pkg-${id}`);
+  if(inp){
+    inp.style.display=on?'block':'none';
+    if(!on)inp.value='';
+    else setTimeout(()=>inp.focus(),50);
+  }
+  // Recalcular textos con el precio efectivo
+  sPkg(id,e.precioKgTemp||'');
 }
 function sPkg(id,val){
   const e=EU[id];if(!e)return;
   e.precioKgTemp=val;
   const p=prods.find(x=>x.id===id);if(!p)return;
-  const pk=parseFloat(val)||0||(p.precio_kg||0);
-  const efectivo=pk>0?pk:(p.precio_kg||0);
+  const pkgTemp=parseFloat(val)||0;
+  const efectivo=pkgTemp>0?pkgTemp:(p.precio_kg||0);
   // Actualizar el texto de resultado en vivo
   if(e.modo==='g'){
     const gv=parseFloat(e.grams)||0;
@@ -1157,7 +1162,12 @@ function sPkg(id,val){
     const rv=document.getElementById(`rv-s-${id}`);
     if(rv)rv.textContent=sv>0?Math.round(sv/(efectivo||1)*1000)+' g':'—';
   }
-  // Actualizar etiqueta del precio temporal arriba
+  // Actualizar la etiqueta de precio x kilo arriba (en vivo)
+  const lbl=document.getElementById(`pkg-lbl-${id}`);
+  if(lbl){
+    lbl.innerHTML=pkgTemp>0?` <span style="color:var(--a);font-weight:700">→ S/${efectivo.toFixed(2)}/kg (esta venta)</span>`:'';
+  }
+  // Actualizar carrito si ya estaba agregado
   const tipo=e.modo==='g'?'g':'s';
   onInpFin(id,tipo,tipo==='g'?e.grams:e.soles);
 }
