@@ -461,6 +461,7 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
       <button id="filt-bajo" onclick="setFiltStock('bajo')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid #EFC97A;background:transparent;color:var(--a);cursor:pointer"><i class="ti ti-alert-triangle" style="font-size:10px;vertical-align:-1px"></i> Stock bajo</button>
       <button id="filt-sin" onclick="setFiltStock('sin')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid #F09595;background:transparent;color:var(--r);cursor:pointer"><i class="ti ti-x" style="font-size:10px;vertical-align:-1px"></i> Sin stock</button>
       <button id="filt-peso" onclick="setFiltStock('peso')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid #85B7EB;background:transparent;color:var(--b);cursor:pointer"><i class="ti ti-weight" style="font-size:10px;vertical-align:-1px"></i> Por peso</button>
+      <button id="filt-sinimg" onclick="setFiltStock('sinimg')" style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:20px;border:1px solid #C4A0E8;background:transparent;color:#8B5CF6;cursor:pointer"><i class="ti ti-photo-off" style="font-size:10px;vertical-align:-1px"></i> Sin imagen</button>
     </div>
     <div id="prod-lista"><div class="loading"><div class="spin"></div> Cargando...</div></div>
   </div>
@@ -632,7 +633,7 @@ function scClase(p){if(p.stock===0)return'sout';if(p.tipo==='unidad'&&p.stock<=S
 function anyItemOn(pid){return Object.values(EI[pid]||{}).some(x=>x?.on);}
 function initE(p){
   if(p.tipo==='unidad')EU[p.id]={qty:1,inc:false,dSel:null,danOn:false,danV:'',precioLibre:'',nota:'',nOpen:false,cKey:null};
-  else if(p.tipo==='peso')EU[p.id]={modo:'g',grams:'',soles:'',precioLibre:'',nota:'',nOpen:false};
+  else if(p.tipo==='peso')EU[p.id]={modo:'g',grams:'',soles:'',precioLibre:'',precioKgTemp:'',nota:'',nOpen:false};
   else EU[p.id]={precioLibre:'',nota:'',nOpen:false};
   EI[p.id]={};
 }
@@ -659,6 +660,8 @@ async function loadAll(){
     listaCompras=lc||[];
     setConn(true);
     rCliSel();rCats();rP();rAlertasStock();actuBadge();
+    // Recuperar carrito si la app se cayó con una venta a medias
+    recuperarCarrito();
   }catch(err){setConn(false);console.error(err);}
 }
 
@@ -1055,11 +1058,16 @@ function buildCard(id){
   } else if(p.tipo==='peso'){
     const mG=e.modo==='g';const gv=parseFloat(e.grams)||0;const sv=parseFloat(e.soles)||0;
     const grEn=carrito.some(c=>c.prodId===id&&c.tag==='g');
-    h+=`<div style="font-size:11px;color:var(--txt2);margin-bottom:6px;font-weight:500">S/${p.precio_kg?.toFixed(2)||'0.00'}/kg</div>
+    const pkgTemp=parseFloat(e.precioKgTemp)||0;
+    const pkgEf=pkgTemp>0?pkgTemp:(p.precio_kg||0); // precio por kg efectivo
+    const tempActivo=pkgTemp>0;
+    h+=`<div style="font-size:11px;color:var(--txt2);margin-bottom:6px;font-weight:500">S/${p.precio_kg?.toFixed(2)||'0.00'}/kg${tempActivo?` <span style="color:var(--a);font-weight:700">→ S/${pkgEf.toFixed(2)}/kg (esta venta)</span>`:''}</div>
     <div class="mt"><button class="mb${mG?' on':''}" onclick="sMod(${id},'g')"><i class="ti ti-weight" style="font-size:10px"></i> Gramos</button><button class="mb${!mG?' on':''}" onclick="sMod(${id},'s')"><i class="ti ti-coin" style="font-size:10px"></i> Soles</button></div>`;
-    if(mG)h+=`<div class="ir"><input type="number" placeholder="ej: 500" min="0" step="1" value="${e.grams}" id="inp-g-${id}" oninput="onInp(${id},'g',this.value)" onchange="onInpFin(${id},'g',this.value)"><span class="iu">g</span></div><div class="rb"><span class="rl2">A pagar</span><span class="rv" id="rv-g-${id}">${gv>0?'S/'+(gv/1000*(p.precio_kg||0)).toFixed(2):'—'}</span></div>`;
-    else h+=`<div class="ir"><input type="number" placeholder="ej: 2.00" min="0" step="0.10" value="${e.soles}" id="inp-s-${id}" oninput="onInp(${id},'s',this.value)" onchange="onInpFin(${id},'s',this.value)"><span class="iu">S/</span></div><div class="rb"><span class="rl2">A pesar</span><span class="rv pu" id="rv-s-${id}">${sv>0?Math.round(sv/(p.precio_kg||1)*1000)+' g':'—'}</span></div>`;
+    if(mG)h+=`<div class="ir"><input type="number" placeholder="ej: 500" min="0" step="1" value="${e.grams}" id="inp-g-${id}" oninput="onInp(${id},'g',this.value)" onchange="onInpFin(${id},'g',this.value)"><span class="iu">g</span></div><div class="rb"><span class="rl2">A pagar</span><span class="rv" id="rv-g-${id}">${gv>0?'S/'+(gv/1000*pkgEf).toFixed(2):'—'}</span></div>`;
+    else h+=`<div class="ir"><input type="number" placeholder="ej: 2.00" min="0" step="0.10" value="${e.soles}" id="inp-s-${id}" oninput="onInp(${id},'s',this.value)" onchange="onInpFin(${id},'s',this.value)"><span class="iu">S/</span></div><div class="rb"><span class="rl2">A pesar</span><span class="rv pu" id="rv-s-${id}">${sv>0?Math.round(sv/(pkgEf||1)*1000)+' g':'—'}</span></div>`;
     h+=`<button class="ab${grEn?' on':''}${!gv&&!sv&&!grEn?' dis':''}" onclick="tCP(${id})">${grEn?'<i class="ti ti-check" style="font-size:11px"></i> En carrito':'<i class="ti ti-plus" style="font-size:11px"></i> Agregar'}</button>`;
+    // Precio por kilo temporal (solo esta venta)
+    h+=`<div class="chks"><label class="chl"><input type="checkbox" style="accent-color:#D69E2E" ${tempActivo?'checked':''} onchange="tPkg(${id},this.checked)"><span class="ct" style="color:var(--a)"><i class="ti ti-tag" style="font-size:10px"></i> Cambiar precio x kilo (solo esta venta)</span></label><input class="di" id="pkg-${id}" type="number" placeholder="Nuevo precio x kilo S/..." step="0.10" min="0" value="${e.precioKgTemp||''}" style="display:${tempActivo?'block':'none'}" oninput="sPkg(${id},this.value)"></div>`;
     const sacos=p.sacos||[];const bolsasPred=p.bolsas_pred||[];
     if(sacos.length){h+=`<div class="sdiv"><span>Sacos</span></div>`;h+=sacos.map(s=>itemSelHtml(id,s.id,`${s.label} · ${s.kg}kg`,s.precio,'📦','saco')).join('');}
     if(bolsasPred.length){h+=`<div class="sdiv"><span>Bolsitas</span></div>`;h+=bolsasPred.map(b=>itemSelHtml(id,b.id,b.nombre,b.precio,'🎁','bolsa')).join('');}
@@ -1118,15 +1126,51 @@ function setQty(id,n){
   });
   rCart();cV();
 }
+function pkgEf(id){
+  // Precio por kilo efectivo: usa el temporal si está definido, sino el del producto
+  const e=EU[id];const p=prods.find(x=>x.id===id);
+  if(!p)return 0;
+  const temp=parseFloat(e?.precioKgTemp)||0;
+  return temp>0?temp:(p.precio_kg||0);
+}
+function tPkg(id,on){
+  const e=EU[id];if(!e)return;
+  if(!on)e.precioKgTemp='';
+  buildCard(id);
+  // Actualizar carrito si ya estaba agregado
+  const tipo=e.modo==='g'?'g':'s';
+  onInpFin(id,tipo,tipo==='g'?e.grams:e.soles);
+}
+function sPkg(id,val){
+  const e=EU[id];if(!e)return;
+  e.precioKgTemp=val;
+  const p=prods.find(x=>x.id===id);if(!p)return;
+  const pk=parseFloat(val)||0||(p.precio_kg||0);
+  const efectivo=pk>0?pk:(p.precio_kg||0);
+  // Actualizar el texto de resultado en vivo
+  if(e.modo==='g'){
+    const gv=parseFloat(e.grams)||0;
+    const rv=document.getElementById(`rv-g-${id}`);
+    if(rv)rv.textContent=gv>0?'S/'+(gv/1000*efectivo).toFixed(2):'—';
+  }else{
+    const sv=parseFloat(e.soles)||0;
+    const rv=document.getElementById(`rv-s-${id}`);
+    if(rv)rv.textContent=sv>0?Math.round(sv/(efectivo||1)*1000)+' g':'—';
+  }
+  // Actualizar etiqueta del precio temporal arriba
+  const tipo=e.modo==='g'?'g':'s';
+  onInpFin(id,tipo,tipo==='g'?e.grams:e.soles);
+}
 function onInp(id,tipo,val){
   // Solo actualiza el valor en estado y el texto de resultado — NO reconstruye la tarjeta
   const e=EU[id];if(!e)return;
   const p=prods.find(x=>x.id===id);if(!p)return;
+  const pk=pkgEf(id);
   if(tipo==='g'){
     e.grams=val;
     const gv=parseFloat(val)||0;
     const rv=document.getElementById(`rv-g-${id}`);
-    if(rv)rv.textContent=gv>0?'S/'+(gv/1000*(p.precio_kg||0)).toFixed(2):'—';
+    if(rv)rv.textContent=gv>0?'S/'+(gv/1000*pk).toFixed(2):'—';
     // Actualizar estado del botón agregar
     const grEn=carrito.some(c=>c.prodId===id&&c.tag==='g');
     const btn=document.querySelector(`#pb-${id} .ab`);
@@ -1135,7 +1179,7 @@ function onInp(id,tipo,val){
     e.soles=val;
     const sv=parseFloat(val)||0;
     const rv=document.getElementById(`rv-s-${id}`);
-    if(rv)rv.textContent=sv>0?Math.round(sv/(p.precio_kg||1)*1000)+' g':'—';
+    if(rv)rv.textContent=sv>0?Math.round(sv/(pk||1)*1000)+' g':'—';
     const grEn=carrito.some(c=>c.prodId===id&&c.tag==='g');
     const btn=document.querySelector(`#pb-${id} .ab`);
     if(btn){btn.className='ab'+(grEn?' on':'')+((!sv&&!grEn)?' dis':'');}
@@ -1147,8 +1191,9 @@ function onInpFin(id,tipo,val){
   const p=prods.find(x=>x.id===id);if(!p)return;
   const gi=carrito.findIndex(c=>c.prodId===id&&c.tag==='g');
   if(gi<0)return; // no está en carrito, nada que actualizar
+  const pk=pkgEf(id);
   let precio=0;
-  if(tipo==='g'){const g=parseFloat(val)||0;if(!g)return;precio=rd2((g/1000)*(p.precio_kg||0));}
+  if(tipo==='g'){const g=parseFloat(val)||0;if(!g)return;precio=rd2((g/1000)*pk);}
   else{const s=parseFloat(val)||0;if(!s)return;precio=s;}
   carrito[gi].precio=precio;
   rCart();
@@ -1234,11 +1279,16 @@ function tCP(id){
   else{
     let precio=0;
     const pl=parseFloat(e.precioLibre)||0;
+    const pk=pkgEf(id);
+    const pkgTemp=parseFloat(e.precioKgTemp)||0;
     if(pl>0){precio=pl;}
-    else if(e.modo==='g'){const g=parseFloat(e.grams)||0;if(!g)return;const dv=e.danOn?parseFloat(e.danV)||0:0;precio=rd2(Math.max(0,(g/1000)*(p.precio_kg||0))-dv);}
+    else if(e.modo==='g'){const g=parseFloat(e.grams)||0;if(!g)return;const dv=e.danOn?parseFloat(e.danV)||0:0;precio=rd2(Math.max(0,(g/1000)*pk)-dv);}
     else{const s=parseFloat(e.soles)||0;if(!s)return;const dv=e.danOn?parseFloat(e.danV)||0:0;precio=rd2(Math.max(0,s-dv));}
     const k='c'+(++cSeq);
-    carrito.push({cKey:k,prodId:id,id,nombre:p.nombre,subNombre:pl>0?'precio libre':e.modo==='g'?`${e.grams}g`:`S/${precio}`,precio,qty:1,tag:'g',nota:e.nota});
+    // Detalle: si hay precio x kilo temporal, anotarlo en el subNombre
+    let subN=pl>0?'precio libre':e.modo==='g'?`${e.grams}g`:`S/${precio}`;
+    if(pkgTemp>0&&pl<=0)subN+=` · S/${pkgTemp.toFixed(2)}/kg`;
+    carrito.push({cKey:k,prodId:id,id,nombre:p.nombre,subNombre:subN,precio,qty:1,tag:'g',nota:e.nota});
   }
   buildCard(id);rCart();cV();
 }
@@ -1328,6 +1378,70 @@ async function guardarNuevoCliCaja(){
     alert('No se pudo registrar el cliente: '+e.message);
   }
 }
+// ── PERSISTENCIA DEL CARRITO (recupera si la app se cae) ──────────────────────
+const CART_KEY='dh_carrito_v1';
+function guardarCarrito(){
+  try{
+    const estado={
+      carrito,
+      cSeq,
+      cliA,
+      ncVal,
+      pagoA,
+      editandoPedidoId,
+      ts:Date.now()
+    };
+    localStorage.setItem(CART_KEY,JSON.stringify(estado));
+  }catch(e){}
+}
+function limpiarCarritoGuardado(){
+  try{localStorage.removeItem(CART_KEY);}catch(e){}
+}
+function recuperarCarrito(){
+  try{
+    const raw=localStorage.getItem(CART_KEY);
+    if(!raw)return;
+    const estado=JSON.parse(raw);
+    // Solo recuperar si tiene productos y es de las últimas 12 horas
+    if(!estado.carrito||!estado.carrito.length)return;
+    if(Date.now()-(estado.ts||0)>43200000){limpiarCarritoGuardado();return;}
+    carrito=estado.carrito||[];
+    cSeq=estado.cSeq||carrito.length;
+    cliA=estado.cliA||{id:null,nombre:'',casero:false};
+    ncVal=estado.ncVal||'';
+    pagoA=estado.pagoA||'e';
+    editandoPedidoId=estado.editandoPedidoId||null;
+    // Reconstruir el estado visual de los productos (marcarlos como incluidos)
+    carrito.forEach(item=>{
+      if(item.tag==='u'&&item.id&&EU[item.id]){
+        EU[item.id].inc=true;EU[item.id].cKey=item.cKey;EU[item.id].qty=item.qty;
+      }
+    });
+    // Restaurar selección de cliente y nota
+    const sel=document.getElementById('cli-sel2');if(sel&&cliA.id)sel.value=cliA.id;
+    const nc2=document.getElementById('nc-inp2');if(nc2&&ncVal){nc2.value=ncVal;nc2.className='nc-inp activo';}
+    if(editandoPedidoId)mostrarBannerEdicion(editandoPedidoId,cliA.nombre||'');
+    rCart();actuFAB();
+    // Avisar al usuario
+    setTimeout(()=>{
+      const n=carrito.length;
+      mostrarAvisoRecuperado(n);
+    },400);
+  }catch(e){}
+}
+function mostrarAvisoRecuperado(n){
+  let aviso=document.getElementById('cart-recovered');
+  if(!aviso){
+    aviso=document.createElement('div');
+    aviso.id='cart-recovered';
+    aviso.style.cssText='position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#1D9E75;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 14px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;max-width:90%';
+    document.body.appendChild(aviso);
+  }
+  aviso.innerHTML=`<i class="ti ti-refresh"></i> Se recuperó tu venta con ${n} producto${n>1?'s':''}`;
+  aviso.style.display='flex';
+  setTimeout(()=>{if(aviso)aviso.style.display='none';},4000);
+}
+
 function actuFAB(){
   const fab=document.getElementById('cart-fab');
   const tot=document.getElementById('cart-fab-total');
@@ -1355,7 +1469,7 @@ function rCart(){
     cont.innerHTML='<div class="empty" style="padding:20px 0"><i class="ti ti-basket" style="font-size:28px"></i><p>Agrega productos desde caja</p></div>';
     if(cc)cc.textContent='vacío';
     if(totTop)totTop.textContent='S/ 0.00';
-    actuFAB();cV();return;
+    actuFAB();cV();limpiarCarritoGuardado();return;
   }
   let total=0;
   const tCls={g:'background:var(--bl);color:var(--b)',saco:'background:var(--bl);color:var(--b)',bolsa:'background:var(--gl);color:var(--gd)'};
@@ -1370,6 +1484,7 @@ function rCart(){
   if(totTop)totTop.textContent='S/ '+total.toFixed(2);
   actuFAB();
   cV();
+  guardarCarrito();
 }
 function qC(key){const item=carrito.find(c=>c.cKey===key);if(item){if(item.tag==='u'){EU[item.id].inc=false;EU[item.id].cKey=null;}else if(item.tag!=='g'){const ei=EI[item.prodId||item.id];if(ei)Object.keys(ei).forEach(k=>{if(ei[k]?.cKey===key){ei[k].on=false;ei[k].cKey=null;}});}}carrito=carrito.filter(c=>c.cKey!==key);prods.forEach(p=>buildCard(p.id));rCart();cV();}
 
@@ -1441,6 +1556,7 @@ async function term(){
     document.getElementById('pago-e').style.display='block';
     document.getElementById('pago-m').style.display='none';
     document.getElementById('bdu').style.display='none';
+    limpiarCarritoGuardado();
     cV();rCart();
     await loadPedidosHoy();rPeds();rAlertasStock();actuBadge();rP();
     cerrarCarrito();
@@ -1937,8 +2053,8 @@ let filtStock='todos';
 function setFiltStock(f){
   filtStock=f;
   // Actualizar botones
-  const btns={todos:'filt-todos',bajo:'filt-bajo',sin:'filt-sin',peso:'filt-peso'};
-  const cols={todos:['var(--g)','var(--g)','#fff'],bajo:['#EFC97A','transparent','var(--a)'],sin:['#F09595','transparent','var(--r)'],peso:['#85B7EB','transparent','var(--b)']};
+  const btns={todos:'filt-todos',bajo:'filt-bajo',sin:'filt-sin',peso:'filt-peso',sinimg:'filt-sinimg'};
+  const cols={todos:['var(--g)','var(--g)','#fff'],bajo:['#EFC97A','transparent','var(--a)'],sin:['#F09595','transparent','var(--r)'],peso:['#85B7EB','transparent','var(--b)'],sinimg:['#C4A0E8','transparent','#8B5CF6']};
   Object.entries(btns).forEach(([k,id])=>{
     const btn=document.getElementById(id);if(!btn)return;
     const[bc,bg,tc]=cols[k];
@@ -1952,6 +2068,7 @@ function setFiltStock(f){
     else if(f==='bajo'){activeBtn.style.background='var(--al)';activeBtn.style.color='var(--a)';activeBtn.style.borderColor='#EFC97A';}
     else if(f==='sin'){activeBtn.style.background='var(--rl)';activeBtn.style.color='var(--r)';activeBtn.style.borderColor='#F09595';}
     else if(f==='peso'){activeBtn.style.background='var(--bl)';activeBtn.style.color='var(--b)';activeBtn.style.borderColor='#85B7EB';}
+    else if(f==='sinimg'){activeBtn.style.background='#F3EDFB';activeBtn.style.color='#8B5CF6';activeBtn.style.borderColor='#C4A0E8';}
   }
   rProds(document.getElementById('prod-srch')?.value||'');
 }
@@ -1964,6 +2081,7 @@ function rProds(q=''){
   if(filtStock==='bajo')lista=lista.filter(p=>p.stock>0&&p.stock<=STOCK_MIN);
   else if(filtStock==='sin')lista=lista.filter(p=>p.stock===0||p.stock==null);
   else if(filtStock==='peso')lista=lista.filter(p=>p.tipo==='peso'||p.tipo==='bolsa');
+  else if(filtStock==='sinimg')lista=lista.filter(p=>!p.imagen_url||!p.imagen_url.trim());
   if(!lista.length){cont.innerHTML='<div class="empty"><i class="ti ti-package"></i><p>Sin productos</p></div>';return;}
   const tL={unidad:'Por unidad',peso:'Por peso',bolsa:'Bolsas'};
   cont.innerHTML=lista.map(p=>{
