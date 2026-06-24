@@ -640,8 +640,23 @@ function initE(p){
 
 // Búsqueda sin tildes
 const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-// Búsqueda multi-palabra: todas las palabras deben aparecer en el texto
-const matchQ=(texto,q)=>{if(!q)return true;const words=q.trim().split(/\s+/).filter(Boolean);const t=norm(texto);return words.every(w=>t.includes(norm(w)));};
+// Palabras de cantidad que se ignoran al buscar (la gente escribe "un cuarto de azucar")
+const STOP_CANT=new Set(['un','una','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','medio','media','cuarto','cuartos','kilo','kilos','kilogramo','kilogramos','kg','gramo','gramos','gr','g','litro','litros','lt','l','de','del','la','el','los','las','docena','docenas','par','pares','bolsa','bolsas','saco','sacos','paquete','paquetes','caja','cajas','unidad','unidades']);
+// Quita palabras de cantidad de la búsqueda. Si no queda nada, devuelve las originales.
+function limpiarCant(words){
+  const filtradas=words.filter(w=>{
+    const n=norm(w);
+    // Ignorar números puros (250, 500, 1, etc.)
+    if(/^\d+([.,]\d+)?$/.test(n))return false;
+    // Ignorar fracciones escritas con barra (1/4, 1/2, 3/4, etc.)
+    if(/^\d+\/\d+$/.test(n))return false;
+    if(STOP_CANT.has(n))return false;
+    return true;
+  });
+  return filtradas.length?filtradas:words;
+}
+// Búsqueda multi-palabra: ignora cantidades, todas las palabras restantes deben aparecer
+const matchQ=(texto,q)=>{if(!q)return true;let words=q.trim().split(/\s+/).filter(Boolean);words=limpiarCant(words);const t=norm(texto);return words.every(w=>t.includes(norm(w)));};
 async function loadAll(){
   try{
     const[{data:c},{data:p},{data:cl},{data:e},{data:d},{data:lc}]=await Promise.all([
