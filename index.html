@@ -1072,8 +1072,8 @@ function buildCard(id){
     if(label||dv>0)h+=`<div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:4px">${label?`<span style="font-size:9px;padding:1px 6px;border-radius:3px;font-weight:600;background:var(--gl);color:var(--gd)">${label}</span>`:''}${dv>0?`<span style="font-size:9px;padding:1px 6px;border-radius:3px;font-weight:600;background:var(--rl);color:var(--r)">-S/${dv.toFixed(2)}</span>`:''}</div>`;
     if(e.qty>1)h+=`<div class="subtot">${e.qty} u. = S/${rd2(pf*e.qty).toFixed(2)}</div>`;
     if(p.stock>0){
-      h+=`<div class="qty-row"><button class="qb" onclick="setQty(${id},${Math.max(1,e.qty-1)})">−</button><input class="qty-inp" type="number" min="1" max="${p.stock}" value="${e.qty}" onchange="setQty(${id},Math.max(1,Math.min(parseInt(this.value)||1,${p.stock})))" onkeydown="if(event.key==='Enter'){setQty(${id},Math.max(1,Math.min(parseInt(this.value)||1,${p.stock})));this.blur()}" onfocus="this.select()" onclick="this.select()"><button class="qb" onclick="setQty(${id},${Math.min(e.qty+1,p.stock)})">+</button></div>
-      <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">${[1,3,6,12].filter(n=>n<=p.stock).map(n=>`<button class="qp${e.qty===n?' on':''}" style="padding:2px 7px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:5px;background:${e.qty===n?'var(--gl)':'var(--bg)'};color:${e.qty===n?'var(--gd)':'var(--txt2)'};cursor:pointer" onclick="setQty(${id},${n})">${n}</button>`).join('')}${cajUds>12&&cajUds<=p.stock?`<button style="padding:2px 7px;font-size:10px;font-weight:700;border:1px solid #85B7EB;border-radius:5px;background:var(--bl);color:var(--b);cursor:pointer" onclick="setQty(${id},${cajUds})">📦 ${cajUds}</button>`:''}</div>
+      h+=`<div class="qty-row"><button class="qb" onclick="chgQty(${id},-1)">−</button><input class="qty-inp" type="number" min="1" max="${p.stock}" value="${e.qty}" onchange="setQty(${id},Math.max(1,Math.min(parseInt(this.value)||1,${p.stock})))" onkeydown="if(event.key==='Enter'){setQty(${id},Math.max(1,Math.min(parseInt(this.value)||1,${p.stock})));this.blur()}" onfocus="this.select()" onclick="this.select()"><button class="qb" onclick="chgQty(${id},1)">+</button></div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">${(p.botones_rapidos&&p.botones_rapidos.length?p.botones_rapidos:[1,3,6,12]).filter(n=>n<=p.stock).map(n=>`<button class="qp${e.qty===n?' on':''}" style="padding:2px 7px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:5px;background:${e.qty===n?'var(--gl)':'var(--bg)'};color:${e.qty===n?'var(--gd)':'var(--txt2)'};cursor:pointer" onclick="setQty(${id},${n})">${n}</button>`).join('')}${cajUds>12&&cajUds<=p.stock?`<button style="padding:2px 7px;font-size:10px;font-weight:700;border:1px solid #85B7EB;border-radius:5px;background:var(--bl);color:var(--b);cursor:pointer" onclick="setQty(${id},${cajUds})">📦 ${cajUds}</button>`:''}</div>
       <button class="ab${e.inc?' on':''}" onclick="tCU(${id})">${e.inc?'<i class="ti ti-check" style="font-size:11px"></i> En carrito':'<i class="ti ti-plus" style="font-size:11px"></i> Agregar'}</button>`;
       const da=[['q','¼ doc','desc_q'],['m','½ doc','desc_m'],['d','Docena','desc_d'],['cj','Caja','desc_cj']].filter(([k,,dk])=>p[dk+'_on']&&p[dk+'_precio']);
       {h+=`<div class="chks">`;h+=da.map(([k,lbl,dk])=>`<label class="chl"><input type="checkbox" ${e.dSel===k?'checked':''} onchange="sD(${id},'${k}',this.checked)"><span class="ct" style="color:var(--gd)">${lbl} · S/${p[dk+'_precio'].toFixed(4)}/u</span></label>`).join('');h+=`<label class="chl"><input type="checkbox" style="accent-color:#E53E3E" ${e.danOn?'checked':''} onchange="tD(${id},this.checked)"><span class="ct" style="color:var(--r)"><i class="ti ti-alert-triangle" style="font-size:10px"></i> Desc. por daño / descuento</span></label>`;
@@ -1099,6 +1099,10 @@ function buildCard(id){
     <div class="mt"><button class="mb${mG?' on':''}" onclick="sMod(${id},'g')"><i class="ti ti-weight" style="font-size:10px"></i> Gramos</button><button class="mb${!mG?' on':''}" onclick="sMod(${id},'s')"><i class="ti ti-coin" style="font-size:10px"></i> Soles</button></div>`;
     if(mG)h+=`<div class="ir"><input type="number" placeholder="ej: 500" min="0" step="1" value="${e.grams}" id="inp-g-${id}" oninput="onInp(${id},'g',this.value)" onchange="onInpFin(${id},'g',this.value)"><span class="iu">g</span></div><div class="rb"><span class="rl2">A pagar</span><span class="rv" id="rv-g-${id}">${gv>0?'S/'+(gv/1000*pkgEf).toFixed(2):'—'}</span></div>`;
     else h+=`<div class="ir"><input type="number" placeholder="ej: 2.00" min="0" step="0.10" value="${e.soles}" id="inp-s-${id}" oninput="onInp(${id},'s',this.value)" onchange="onInpFin(${id},'s',this.value)"><span class="iu">S/</span></div><div class="rb"><span class="rl2">A pesar</span><span class="rv pu" id="rv-s-${id}">${sv>0?Math.round(sv/(pkgEf||1)*1000)+' g':'—'}</span></div>`;
+    // Botones rápidos de peso (solo modo gramos, si el producto los tiene configurados)
+    if(mG&&p.botones_peso&&p.botones_peso.length){
+      h+=`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">${p.botones_peso.map(g=>{const lbl=g>=1000?(g/1000)+'k':g+'g';const act=parseFloat(e.grams)===g;return `<button class="qp" style="padding:2px 8px;font-size:10px;font-weight:600;border:1px solid ${act?'var(--gb)':'var(--border)'};border-radius:5px;background:${act?'var(--gl)':'var(--bg)'};color:${act?'var(--gd)':'var(--txt2)'};cursor:pointer" onclick="setPeso(${id},${g})">${lbl}</button>`;}).join('')}</div>`;
+    }
     h+=`<button class="ab${grEn?' on':''}${!gv&&!sv&&!grEn?' dis':''}" onclick="tCP(${id})">${grEn?'<i class="ti ti-check" style="font-size:11px"></i> En carrito':'<i class="ti ti-plus" style="font-size:11px"></i> Agregar'}</button>`;
     // Precio por kilo temporal (solo esta venta)
     h+=`<div class="chks"><label class="chl"><input type="checkbox" style="accent-color:#D69E2E" ${tempActivo?'checked':''} onchange="tPkg(${id},this.checked)"><span class="ct" style="color:var(--a)"><i class="ti ti-tag" style="font-size:10px"></i> Cambiar precio x kilo (solo esta venta)</span></label><input class="di" id="pkg-${id}" type="number" placeholder="Nuevo precio x kilo S/..." step="0.10" min="0" value="${e.precioKgTemp||''}" style="display:${tempActivo?'block':'none'}" oninput="sPkg(${id},this.value)"></div>`;
@@ -1142,6 +1146,31 @@ function buildCard(id){
   el.innerHTML=h;
 }
 
+function setPeso(id,gramos){
+  const e=EU[id];if(!e)return;
+  e.modo='g';
+  e.grams=String(gramos);
+  e.soles='';
+  buildCard(id);
+  // Si ya está en el carrito, actualizar; si no, agregarlo
+  const gi=carrito.findIndex(c=>c.prodId===id&&c.tag==='g');
+  if(gi>=0){onInpFin(id,'g',String(gramos));}
+  else{tCP(id);}
+}
+function parseBotones(txt){
+  if(!txt||!txt.trim())return [];
+  return txt.split(/[,\s]+/).map(x=>parseInt(x.trim())).filter(n=>n>0&&!isNaN(n)).slice(0,12);
+}
+function parseBotonesPeso(txt){
+  if(!txt||!txt.trim())return [];
+  return txt.split(/[,\s]+/).map(x=>parseInt(x.trim())).filter(n=>n>0&&!isNaN(n)).slice(0,12);
+}
+function chgQty(id,delta){
+  // Lee la cantidad ACTUAL del estado y suma/resta (arregla el bug del +/-)
+  const e=EU[id];if(!e)return;
+  const actual=e.qty||1;
+  setQty(id,actual+delta);
+}
 function setQty(id,n){
   const p=prods.find(x=>x.id===id);
   n=Math.max(1,Math.min(parseInt(n)||1,p.stock||999));
@@ -1149,14 +1178,18 @@ function setQty(id,n){
   const e=EU[id];
   const{precio}=getPU(p);
   const dv=e.danOn?parseFloat(e.danV)||0:0;
-  const pf=e.precioLibre&&parseFloat(e.precioLibre)>0?parseFloat(e.precioLibre):rd2(Math.max(0,precio-dv));
-  const subExacto=e.precioLibre&&parseFloat(e.precioLibre)>0?null:getSubtotalExacto(p,e,n,pf);
+  const modo=e.danModo||'t';
+  const esLibre=e.precioLibre&&parseFloat(e.precioLibre)>0;
+  let pf,subExacto,descTot=0;
+  if(esLibre){pf=parseFloat(e.precioLibre);subExacto=null;}
+  else if(dv>0&&modo==='t'){pf=precio;descTot=dv;subExacto=getSubtotalExacto(p,e,n,precio);}
+  else{pf=rd2(Math.max(0,precio-dv));subExacto=getSubtotalExacto(p,e,n,pf);}
   const c=carrito.find(x=>x.cKey===EU[id].cKey);
-  if(c){c.qty=n;c.precio=pf;c.subtotalExacto=subExacto;}
+  if(c){c.qty=n;c.precio=pf;c.subtotalExacto=subExacto;c.descTotal=descTot;}
   // Actualizar subtotal mostrado en la tarjeta
   const sub=document.querySelector('#pb-'+id+' .subtot');
-  const totalMostrar=subExacto!==null?subExacto:rd2(pf*n);
-  if(sub&&n>1)sub.textContent=n+' u. = S/'+totalMostrar.toFixed(2);
+  const totalMostrar=(subExacto!==null?subExacto:rd2(pf*n))-descTot;
+  if(sub&&n>1)sub.textContent=n+' u. = S/'+rd2(Math.max(0,totalMostrar)).toFixed(2);
   else if(sub)sub.textContent='';
   // Actualizar input valor
   const inp=document.querySelector('#pb-'+id+' .qty-inp');
@@ -2377,6 +2410,9 @@ function rFormProd(p){
         '<input type="number" id="fp-cj" value="'+cajUds+'" min="1" oninput="fRec()">'+
       '</div>'+
       htmlPrecioCompra(esAdmin, p, 'unidad')+
+      '<div class="seclbl" style="margin-top:12px">Botones rápidos de cantidad</div>'+
+      '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Números de acceso rápido en caja. Ej: 1, 3, 6, 12. Déjalo vacío para usar los predeterminados.</div>'+
+      '<input type="text" id="fp-botones" value="'+((p?.botones_rapidos&&p.botones_rapidos.length)?p.botones_rapidos.join(', '):'')+'" placeholder="Ej: 1, 3, 6, 8, 12, 20" style="width:100%">'+
       '<div class="seclbl" style="margin-top:12px">Descuentos por volumen</div>'+
       descB+
       '<div class="dan-blk'+(p?.perm_danio?' on':'')+'" id="fdb-dan">'+
@@ -2396,6 +2432,9 @@ function rFormProd(p){
         '<input type="number" id="fp-kg" value="'+(p?.precio_kg||p?.precio||'')+'" step="0.10" min="0">'+
       '</div>'+
       htmlPrecioCompra(esAdmin, p, 'peso')+
+      '<div class="seclbl" style="margin-top:12px">Botones rápidos de peso (gramos)</div>'+
+      '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Pesos de acceso rápido en caja, en gramos. Ej: 250, 500, 1000, 2000, 5000. Déjalo vacío para no mostrar.</div>'+
+      '<input type="text" id="fp-botones-peso" value="'+((p?.botones_peso&&p.botones_peso.length)?p.botones_peso.join(', '):'')+'" placeholder="Ej: 250, 500, 1000, 2000, 5000" style="width:100%">'+
       '<div class="seclbl" style="margin-top:12px">Precios por volumen (opcional)</div>'+
       '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Precio por kilo rebajado desde cierta cantidad. Aparecerá como casilla en caja.</div>'+
       '<div id="vol-wrap">'+volHtml+'</div>'+
@@ -2524,8 +2563,8 @@ async function guardarProd(){
   const cat=document.getElementById('fp-c')?.value||cats[0];const stock=parseInt(document.getElementById('fp-s')?.value)||0;
   let datos={nombre:nom,cat,stock,tipo:tipoSel,subcategoria:getSubcatValue()};
   const pcInput=parseFloat(document.getElementById('fp-pc')?.value)||0;
-  if(tipoSel==='unidad'){const precio=parseFloat(document.getElementById('fp-p')?.value)||0;if(!precio){alert('Ingresa el precio base');return;}const cj=parseInt(document.getElementById('fp-cj')?.value)||24;['q','m','d'].forEach(k=>{datos[`desc_${k}_on`]=document.getElementById(`fdc-${k}`)?.checked||false;datos[`desc_${k}_precio`]=parseFloat(document.getElementById(`fdp-${k}`)?.value)||0;datos[`desc_${k}_total`]=parseFloat(document.getElementById(`fdt-${k}`)?.value)||0;});datos.desc_cj_on=document.getElementById('fdc-cj')?.checked||false;datos.desc_cj_precio=parseFloat(document.getElementById('fdp-cj')?.value)||0;datos.desc_cj_total=parseFloat(document.getElementById('fdt-cj')?.value)||0;datos.desc_cj_uds=cj;datos.precio=precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas=getBolsas();datos.bolsas_pred=[];datos.perm_danio=document.getElementById('fdc-dan')?.checked||false;if(pcInput)datos.precio_compra=pcInput;}
-  else if(tipoSel==='peso'){const kg=parseFloat(document.getElementById('fp-kg')?.value)||0;if(!kg){alert('Ingresa el precio por kilo');return;}datos.precio_kg=kg;datos.precio=kg;datos.sacos=getSacos();datos.bolsas_pred=getBolsas();datos.bolsas=[];datos.perm_danio=false;datos.precios_volumen=getVol();if(pcInput)datos.precio_compra=pcInput;}
+  if(tipoSel==='unidad'){const precio=parseFloat(document.getElementById('fp-p')?.value)||0;if(!precio){alert('Ingresa el precio base');return;}const cj=parseInt(document.getElementById('fp-cj')?.value)||24;['q','m','d'].forEach(k=>{datos[`desc_${k}_on`]=document.getElementById(`fdc-${k}`)?.checked||false;datos[`desc_${k}_precio`]=parseFloat(document.getElementById(`fdp-${k}`)?.value)||0;datos[`desc_${k}_total`]=parseFloat(document.getElementById(`fdt-${k}`)?.value)||0;});datos.desc_cj_on=document.getElementById('fdc-cj')?.checked||false;datos.desc_cj_precio=parseFloat(document.getElementById('fdp-cj')?.value)||0;datos.desc_cj_total=parseFloat(document.getElementById('fdt-cj')?.value)||0;datos.desc_cj_uds=cj;datos.precio=precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas=getBolsas();datos.bolsas_pred=[];datos.perm_danio=document.getElementById('fdc-dan')?.checked||false;datos.botones_rapidos=parseBotones(document.getElementById('fp-botones')?.value);if(pcInput)datos.precio_compra=pcInput;}
+  else if(tipoSel==='peso'){const kg=parseFloat(document.getElementById('fp-kg')?.value)||0;if(!kg){alert('Ingresa el precio por kilo');return;}datos.precio_kg=kg;datos.precio=kg;datos.sacos=getSacos();datos.bolsas_pred=getBolsas();datos.bolsas=[];datos.perm_danio=false;datos.precios_volumen=getVol();datos.botones_peso=parseBotonesPeso(document.getElementById('fp-botones-peso')?.value);if(pcInput)datos.precio_compra=pcInput;}
   else{const bolsas=getBolsas();if(!bolsas.length){alert('Agrega al menos una bolsa');return;}datos.bolsas=bolsas;datos.precio=bolsas[0].precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas_pred=bolsas;datos.perm_danio=false;}
   if(ePId){
     const imgFile=document.getElementById('fp-img')?.files[0];
