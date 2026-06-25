@@ -1099,9 +1099,10 @@ function buildCard(id){
     <div class="mt"><button class="mb${mG?' on':''}" onclick="sMod(${id},'g')"><i class="ti ti-weight" style="font-size:10px"></i> Gramos</button><button class="mb${!mG?' on':''}" onclick="sMod(${id},'s')"><i class="ti ti-coin" style="font-size:10px"></i> Soles</button></div>`;
     if(mG)h+=`<div class="ir"><input type="number" placeholder="ej: 500" min="0" step="1" value="${e.grams}" id="inp-g-${id}" oninput="onInp(${id},'g',this.value)" onchange="onInpFin(${id},'g',this.value)"><span class="iu">g</span></div><div class="rb"><span class="rl2">A pagar</span><span class="rv" id="rv-g-${id}">${gv>0?'S/'+(gv/1000*pkgEf).toFixed(2):'—'}</span></div>`;
     else h+=`<div class="ir"><input type="number" placeholder="ej: 2.00" min="0" step="0.10" value="${e.soles}" id="inp-s-${id}" oninput="onInp(${id},'s',this.value)" onchange="onInpFin(${id},'s',this.value)"><span class="iu">S/</span></div><div class="rb"><span class="rl2">A pesar</span><span class="rv pu" id="rv-s-${id}">${sv>0?Math.round(sv/(pkgEf||1)*1000)+' g':'—'}</span></div>`;
-    // Botones rápidos de peso (solo modo gramos, si el producto los tiene configurados)
-    if(mG&&p.botones_peso&&p.botones_peso.length){
-      h+=`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">${p.botones_peso.map(g=>{const lbl=g>=1000?(g/1000)+'k':g+'g';const act=parseFloat(e.grams)===g;return `<button class="qp" style="padding:2px 8px;font-size:10px;font-weight:600;border:1px solid ${act?'var(--gb)':'var(--border)'};border-radius:5px;background:${act?'var(--gl)':'var(--bg)'};color:${act?'var(--gd)':'var(--txt2)'};cursor:pointer" onclick="setPeso(${id},${g})">${lbl}</button>`;}).join('')}</div>`;
+    // Botones rápidos de peso (solo modo gramos) — usa los del producto o los 5 por defecto
+    if(mG){
+      const btnsPeso=(p.botones_peso&&p.botones_peso.length)?p.botones_peso:[{nombre:'1/8',g:125},{nombre:'1/4',g:250},{nombre:'1/2',g:500},{nombre:'1k',g:1000},{nombre:'5k',g:5000}];
+      h+=`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">${btnsPeso.map(b=>{const act=parseFloat(e.grams)===b.g;return `<button class="qp" style="padding:2px 8px;font-size:10px;font-weight:600;border:1px solid ${act?'var(--gb)':'var(--border)'};border-radius:5px;background:${act?'var(--gl)':'var(--bg)'};color:${act?'var(--gd)':'var(--txt2)'};cursor:pointer" onclick="setPeso(${id},${b.g})">${b.nombre}</button>`;}).join('')}</div>`;
     }
     h+=`<button class="ab${grEn?' on':''}${!gv&&!sv&&!grEn?' dis':''}" onclick="tCP(${id})">${grEn?'<i class="ti ti-check" style="font-size:11px"></i> En carrito':'<i class="ti ti-plus" style="font-size:11px"></i> Agregar'}</button>`;
     // Precio por kilo temporal (solo esta venta)
@@ -1161,9 +1162,23 @@ function parseBotones(txt){
   if(!txt||!txt.trim())return [];
   return txt.split(/[,\s]+/).map(x=>parseInt(x.trim())).filter(n=>n>0&&!isNaN(n)).slice(0,12);
 }
-function parseBotonesPeso(txt){
-  if(!txt||!txt.trim())return [];
-  return txt.split(/[,\s]+/).map(x=>parseInt(x.trim())).filter(n=>n>0&&!isNaN(n)).slice(0,12);
+let _bpi=2000;
+function addBtnPeso(){
+  const w=document.getElementById('btnpeso-wrap');if(!w)return;
+  const i='n'+(_bpi++);
+  const d=document.createElement('div');d.className='bolsa-row';d.id='bpr-'+i;
+  d.innerHTML=`<input type="text" placeholder="Ej: 1/4" id="bpn-${i}" style="max-width:90px"><input type="number" placeholder="gramos" step="1" min="1" id="bpg-${i}"><span style="font-size:11px;color:var(--txt2)">g</span><button class="bolsa-del" onclick="document.getElementById('bpr-${i}').remove()"><i class="ti ti-x"></i></button>`;
+  w.appendChild(d);
+}
+function getBtnPeso(){
+  const w=document.getElementById('btnpeso-wrap');if(!w)return[];
+  return Array.from(w.querySelectorAll('.bolsa-row')).map(row=>{
+    const id=row.id.replace('bpr-','');
+    const nombre=document.getElementById('bpn-'+id)?.value.trim();
+    const g=parseInt(document.getElementById('bpg-'+id)?.value)||0;
+    if(nombre&&g>0)return{nombre,g};
+    return null;
+  }).filter(Boolean);
 }
 function chgQty(id,delta){
   // Lee la cantidad ACTUAL del estado y suma/resta (arregla el bug del +/-)
@@ -2363,6 +2378,17 @@ function rFormProd(p){
     '</div>';
   }).join('');
 
+  // Botones rápidos de peso (nombre + gramos) — por defecto los 5 estándar
+  const BTNS_PESO_DEFAULT=[{nombre:'1/8',g:125},{nombre:'1/4',g:250},{nombre:'1/2',g:500},{nombre:'1k',g:1000},{nombre:'5k',g:5000}];
+  const bpI=(p?.botones_peso&&p.botones_peso.length)?p.botones_peso:BTNS_PESO_DEFAULT;
+  const btnPesoHtml=bpI.map(function(b,i){
+    return '<div class="bolsa-row" id="bpr-'+i+'">'+
+      '<input type="text" placeholder="Ej: 1/4" value="'+(b.nombre||'')+'" id="bpn-'+i+'" style="max-width:90px">'+
+      '<input type="number" placeholder="gramos" step="1" min="1" value="'+(b.g||'')+'" id="bpg-'+i+'">'+
+      '<span style="font-size:11px;color:var(--txt2)">g</span>'+
+      '<button class="bolsa-del" onclick="document.getElementById(&apos;bpr-'+i+'&apos;).remove()"><i class="ti ti-x"></i></button>'+
+    '</div>';
+  }).join('');
   // Precios por volumen (kg) rows
   const pvI = (p?.precios_volumen)||[];
   const volHtml = pvI.map(function(v,i){
@@ -2432,9 +2458,10 @@ function rFormProd(p){
         '<input type="number" id="fp-kg" value="'+(p?.precio_kg||p?.precio||'')+'" step="0.10" min="0">'+
       '</div>'+
       htmlPrecioCompra(esAdmin, p, 'peso')+
-      '<div class="seclbl" style="margin-top:12px">Botones rápidos de peso (gramos)</div>'+
-      '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Pesos de acceso rápido en caja, en gramos. Ej: 250, 500, 1000, 2000, 5000. Déjalo vacío para no mostrar.</div>'+
-      '<input type="text" id="fp-botones-peso" value="'+((p?.botones_peso&&p.botones_peso.length)?p.botones_peso.join(', '):'')+'" placeholder="Ej: 250, 500, 1000, 2000, 5000" style="width:100%">'+
+      '<div class="seclbl" style="margin-top:12px">Botones rápidos de peso</div>'+
+      '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Ponle un nombre (Ej: 1/4) y su peso en gramos. Aparecen en caja para llenar el peso con un toque.</div>'+
+      '<div id="btnpeso-wrap">'+btnPesoHtml+'</div>'+
+      '<button class="btn-add-b" onclick="addBtnPeso()"><i class="ti ti-plus"></i> Agregar botón de peso</button>'+
       '<div class="seclbl" style="margin-top:12px">Precios por volumen (opcional)</div>'+
       '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Precio por kilo rebajado desde cierta cantidad. Aparecerá como casilla en caja.</div>'+
       '<div id="vol-wrap">'+volHtml+'</div>'+
@@ -2564,7 +2591,7 @@ async function guardarProd(){
   let datos={nombre:nom,cat,stock,tipo:tipoSel,subcategoria:getSubcatValue()};
   const pcInput=parseFloat(document.getElementById('fp-pc')?.value)||0;
   if(tipoSel==='unidad'){const precio=parseFloat(document.getElementById('fp-p')?.value)||0;if(!precio){alert('Ingresa el precio base');return;}const cj=parseInt(document.getElementById('fp-cj')?.value)||24;['q','m','d'].forEach(k=>{datos[`desc_${k}_on`]=document.getElementById(`fdc-${k}`)?.checked||false;datos[`desc_${k}_precio`]=parseFloat(document.getElementById(`fdp-${k}`)?.value)||0;datos[`desc_${k}_total`]=parseFloat(document.getElementById(`fdt-${k}`)?.value)||0;});datos.desc_cj_on=document.getElementById('fdc-cj')?.checked||false;datos.desc_cj_precio=parseFloat(document.getElementById('fdp-cj')?.value)||0;datos.desc_cj_total=parseFloat(document.getElementById('fdt-cj')?.value)||0;datos.desc_cj_uds=cj;datos.precio=precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas=getBolsas();datos.bolsas_pred=[];datos.perm_danio=document.getElementById('fdc-dan')?.checked||false;datos.botones_rapidos=parseBotones(document.getElementById('fp-botones')?.value);if(pcInput)datos.precio_compra=pcInput;}
-  else if(tipoSel==='peso'){const kg=parseFloat(document.getElementById('fp-kg')?.value)||0;if(!kg){alert('Ingresa el precio por kilo');return;}datos.precio_kg=kg;datos.precio=kg;datos.sacos=getSacos();datos.bolsas_pred=getBolsas();datos.bolsas=[];datos.perm_danio=false;datos.precios_volumen=getVol();datos.botones_peso=parseBotonesPeso(document.getElementById('fp-botones-peso')?.value);if(pcInput)datos.precio_compra=pcInput;}
+  else if(tipoSel==='peso'){const kg=parseFloat(document.getElementById('fp-kg')?.value)||0;if(!kg){alert('Ingresa el precio por kilo');return;}datos.precio_kg=kg;datos.precio=kg;datos.sacos=getSacos();datos.bolsas_pred=getBolsas();datos.bolsas=[];datos.perm_danio=false;datos.precios_volumen=getVol();datos.botones_peso=getBtnPeso();if(pcInput)datos.precio_compra=pcInput;}
   else{const bolsas=getBolsas();if(!bolsas.length){alert('Agrega al menos una bolsa');return;}datos.bolsas=bolsas;datos.precio=bolsas[0].precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas_pred=bolsas;datos.perm_danio=false;}
   if(ePId){
     const imgFile=document.getElementById('fp-img')?.files[0];
