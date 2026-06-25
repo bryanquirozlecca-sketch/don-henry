@@ -1377,8 +1377,20 @@ function acC(id){
   const p=prods.find(x=>x.id===id);const e=EU[id];
   const{precio,label}=getPU(p);
   const dv=e.danOn?parseFloat(e.danV)||0:0;
-  c.precio=rd2(Math.max(0,precio-dv));c.qty=e.qty;c.label=label;
-  c.subtotalExacto=e.precioLibre&&parseFloat(e.precioLibre)>0?null:getSubtotalExacto(p,e,e.qty,c.precio);
+  const modo=e.danModo||'t';
+  const esLibre=e.precioLibre&&parseFloat(e.precioLibre)>0;
+  c.qty=e.qty;c.label=label;
+  if(esLibre){
+    c.precio=precio;c.descTotal=0;c.subtotalExacto=null;
+  }else if(dv>0&&modo==='t'){
+    // Descuento al total: precio normal, descuenta una vez del subtotal
+    c.precio=precio;c.descTotal=dv;
+    c.subtotalExacto=getSubtotalExacto(p,e,e.qty,precio);
+  }else{
+    // Descuento por unidad (o sin descuento)
+    c.precio=rd2(Math.max(0,precio-dv));c.descTotal=0;
+    c.subtotalExacto=getSubtotalExacto(p,e,e.qty,c.precio);
+  }
 }
 
 function camCli(){const sel=document.getElementById('cli-sel');const opt=sel.options[sel.selectedIndex];const cid=parseInt(opt.value)||null;const c=clis.find(x=>x.id===cid);cliA={id:cid,nombre:opt.value?opt.text.replace(' ⭐',''):'',casero:c?.casero||false};document.getElementById('ctag').style.display=cliA.casero?'flex':'none';if(cid){const nc=document.getElementById('nc-inp');if(nc){nc.value='';ncVal='';nc.className='nc-inp';}}carrito.forEach(i=>{const p=prods.find(x=>x.id===i.id);if(p&&p.tipo==='unidad')acC(i.id);});rP();rCart();cV();}
