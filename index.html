@@ -620,7 +620,7 @@ function getPU(p){
   if(cliA.casero){const m=getMD(p);if(m)return{precio:m.precio,label:'casero'};}
   return{precio:p.precio,label:null};
 }
-function getItemSubtotal(i){return i.subtotalExacto!=null?i.subtotalExacto:rd2(i.precio*i.qty);}
+function getItemSubtotal(i){const base=i.subtotalExacto!=null?i.subtotalExacto:rd2(i.precio*i.qty);return rd2(Math.max(0,base-(i.descTotal||0)));}
 function gT(){return rd2(carrito.reduce((s,i)=>s+getItemSubtotal(i),0));}
 function getNom(){
   if(cliA.nombre)return cliA.nombre;
@@ -632,7 +632,7 @@ function getNom(){
 function scClase(p){if(p.stock===0)return'sout';if(p.tipo==='unidad'&&p.stock<=STOCK_MIN)return'slow';return'sok';}
 function anyItemOn(pid){return Object.values(EI[pid]||{}).some(x=>x?.on);}
 function initE(p){
-  if(p.tipo==='unidad')EU[p.id]={qty:1,inc:false,dSel:null,danOn:false,danV:'',precioLibre:'',nota:'',nOpen:false,cKey:null};
+  if(p.tipo==='unidad')EU[p.id]={qty:1,inc:false,dSel:null,danOn:false,danV:'',danModo:'t',precioLibre:'',nota:'',nOpen:false,cKey:null};
   else if(p.tipo==='peso')EU[p.id]={modo:'g',grams:'',soles:'',precioLibre:'',precioKgTemp:'',nota:'',nOpen:false};
   else EU[p.id]={precioLibre:'',nota:'',nOpen:false};
   EI[p.id]={};
@@ -944,13 +944,24 @@ function onPrecioLibre(id,val){
   if(EU[id].cKey){
     const c=carrito.find(x=>x.cKey===EU[id].cKey);
     if(c){
-      if(pl>0){c.precio=pl;c.subtotalExacto=null;c.label='precio libre';}
+      if(pl>0){c.precio=pl;c.subtotalExacto=null;c.label='precio libre';c.descTotal=0;}
       else{
         const{precio,label}=getPU(p);
         const dv=EU[id].danOn?parseFloat(EU[id].danV)||0:0;
-        c.precio=rd2(Math.max(0,precio-dv));
-        c.label=label;
-        c.subtotalExacto=getSubtotalExacto(p,e,e.qty,c.precio);
+        const modo=EU[id].danModo||'t';
+        if(dv>0&&modo==='t'){
+          // Descuento al total: precio normal, descuenta una vez del subtotal
+          c.precio=precio;
+          c.descTotal=dv;
+          c.label=label;
+          c.subtotalExacto=getSubtotalExacto(p,e,e.qty,precio);
+        }else{
+          // Descuento por unidad (o sin descuento)
+          c.precio=rd2(Math.max(0,precio-dv));
+          c.descTotal=0;
+          c.label=label;
+          c.subtotalExacto=getSubtotalExacto(p,e,e.qty,c.precio);
+        }
       }
       rCart();cV();
     }
@@ -1065,7 +1076,15 @@ function buildCard(id){
       <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">${[1,3,6,12].filter(n=>n<=p.stock).map(n=>`<button class="qp${e.qty===n?' on':''}" style="padding:2px 7px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:5px;background:${e.qty===n?'var(--gl)':'var(--bg)'};color:${e.qty===n?'var(--gd)':'var(--txt2)'};cursor:pointer" onclick="setQty(${id},${n})">${n}</button>`).join('')}${cajUds>12&&cajUds<=p.stock?`<button style="padding:2px 7px;font-size:10px;font-weight:700;border:1px solid #85B7EB;border-radius:5px;background:var(--bl);color:var(--b);cursor:pointer" onclick="setQty(${id},${cajUds})">📦 ${cajUds}</button>`:''}</div>
       <button class="ab${e.inc?' on':''}" onclick="tCU(${id})">${e.inc?'<i class="ti ti-check" style="font-size:11px"></i> En carrito':'<i class="ti ti-plus" style="font-size:11px"></i> Agregar'}</button>`;
       const da=[['q','¼ doc','desc_q'],['m','½ doc','desc_m'],['d','Docena','desc_d'],['cj','Caja','desc_cj']].filter(([k,,dk])=>p[dk+'_on']&&p[dk+'_precio']);
-      if(da.length||p.perm_danio){h+=`<div class="chks">`;h+=da.map(([k,lbl,dk])=>`<label class="chl"><input type="checkbox" ${e.dSel===k?'checked':''} onchange="sD(${id},'${k}',this.checked)"><span class="ct" style="color:var(--gd)">${lbl} · S/${p[dk+'_precio'].toFixed(4)}/u</span></label>`).join('');if(p.perm_danio)h+=`<label class="chl"><input type="checkbox" style="accent-color:#E53E3E" ${e.danOn?'checked':''} onchange="tD(${id},this.checked)"><span class="ct" style="color:var(--r)"><i class="ti ti-alert-triangle" style="font-size:10px"></i> Desc. por daño</span></label><input class="di" id="di-${id}" type="number" placeholder="Descontar S/..." step="0.50" min="0" value="${e.danV}" style="display:${e.danOn?'block':'none'}" oninput="sDan(${id},this.value)">`;h+=`</div>`;}
+      {h+=`<div class="chks">`;h+=da.map(([k,lbl,dk])=>`<label class="chl"><input type="checkbox" ${e.dSel===k?'checked':''} onchange="sD(${id},'${k}',this.checked)"><span class="ct" style="color:var(--gd)">${lbl} · S/${p[dk+'_precio'].toFixed(4)}/u</span></label>`).join('');h+=`<label class="chl"><input type="checkbox" style="accent-color:#E53E3E" ${e.danOn?'checked':''} onchange="tD(${id},this.checked)"><span class="ct" style="color:var(--r)"><i class="ti ti-alert-triangle" style="font-size:10px"></i> Desc. por daño / descuento</span></label>`;
+      if(e.danOn){
+        const modo=e.danModo||'t';
+        h+=`<div style="display:flex;gap:5px;margin:4px 0 2px">
+          <button onclick="setDanModo(${id},'t')" style="flex:1;padding:5px;font-size:11px;font-weight:600;border-radius:7px;cursor:pointer;border:1px solid ${modo==='t'?'var(--r)':'var(--border)'};background:${modo==='t'?'var(--rl)':'transparent'};color:${modo==='t'?'var(--r)':'var(--txt2)'}">Al total</button>
+          <button onclick="setDanModo(${id},'u')" style="flex:1;padding:5px;font-size:11px;font-weight:600;border-radius:7px;cursor:pointer;border:1px solid ${modo==='u'?'var(--r)':'var(--border)'};background:${modo==='u'?'var(--rl)':'transparent'};color:${modo==='u'?'var(--r)':'var(--txt2)'}">Por unidad</button>
+        </div>`;
+      }
+      h+=`<input class="di" id="di-${id}" type="number" placeholder="${(e.danModo||'t')==='t'?'Descontar S/ al total...':'Descontar S/ por unidad...'}" step="0.50" min="0" value="${e.danV}" style="display:${e.danOn?'block':'none'}" oninput="sDan(${id},this.value)">`;h+=`</div>`;}
       // Bolsas / paquetes para producto por unidad
       const bolsasU=p.bolsas||[];
       if(bolsasU.length){h+=`<div class="sdiv"><span>Bolsas / Paquetes</span></div>`;h+=bolsasU.map(b=>itemSelHtml(id,b.id,b.nombre,b.precio,'📦','bolsa')).join('');}
@@ -1083,6 +1102,16 @@ function buildCard(id){
     h+=`<button class="ab${grEn?' on':''}${!gv&&!sv&&!grEn?' dis':''}" onclick="tCP(${id})">${grEn?'<i class="ti ti-check" style="font-size:11px"></i> En carrito':'<i class="ti ti-plus" style="font-size:11px"></i> Agregar'}</button>`;
     // Precio por kilo temporal (solo esta venta)
     h+=`<div class="chks"><label class="chl"><input type="checkbox" style="accent-color:#D69E2E" ${tempActivo?'checked':''} onchange="tPkg(${id},this.checked)"><span class="ct" style="color:var(--a)"><i class="ti ti-tag" style="font-size:10px"></i> Cambiar precio x kilo (solo esta venta)</span></label><input class="di" id="pkg-${id}" type="number" placeholder="Nuevo precio x kilo S/..." step="0.10" min="0" value="${e.precioKgTemp||''}" style="display:${tempActivo?'block':'none'}" oninput="sPkg(${id},this.value)"></div>`;
+    // Precios por volumen configurados (casillas para marcar)
+    const volNiveles=p.precios_volumen||[];
+    if(volNiveles.length){
+      h+=`<div class="chks">`;
+      volNiveles.forEach(v=>{
+        const activo=pkgTemp>0&&Math.abs(pkgTemp-v.precio)<0.001;
+        h+=`<label class="chl"><input type="checkbox" style="accent-color:#1D9E75" ${activo?'checked':''} onchange="tVol(${id},${v.precio},this.checked)"><span class="ct" style="color:var(--gd)"><i class="ti ti-discount" style="font-size:10px"></i> Desde ${v.desde}kg → S/${v.precio.toFixed(2)}/kg</span></label>`;
+      });
+      h+=`</div>`;
+    }
     const sacos=p.sacos||[];const bolsasPred=p.bolsas_pred||[];
     if(sacos.length){h+=`<div class="sdiv"><span>Sacos</span></div>`;h+=sacos.map(s=>itemSelHtml(id,s.id,`${s.label} · ${s.kg}kg`,s.precio,'📦','saco')).join('');}
     if(bolsasPred.length){h+=`<div class="sdiv"><span>Bolsitas</span></div>`;h+=bolsasPred.map(b=>itemSelHtml(id,b.id,b.nombre,b.precio,'🎁','bolsa')).join('');}
@@ -1230,6 +1259,22 @@ function tD(id,c){
   actualizarPreciosItems(id);
   acC(id);buildCard(id);rCart();cV();
 }
+function tVol(id,precio,on){
+  const e=EU[id];if(!e)return;
+  // Al marcar un nivel de volumen, fija el precio por kilo temporal a ese valor.
+  // Al desmarcar, lo quita.
+  e.precioKgTemp=on?String(precio):'';
+  buildCard(id);
+  // Actualizar carrito si ya estaba agregado
+  const tipo=e.modo==='g'?'g':'s';
+  onInpFin(id,tipo,tipo==='g'?e.grams:e.soles);
+}
+function setDanModo(id,modo){
+  if(!EU[id])return;
+  EU[id].danModo=modo;
+  actualizarPreciosItems(id);
+  acC(id);buildCard(id);rCart();cV();
+}
 function sDan(id,v){
   EU[id].danV=v;
   // Actualizar precios de items ya marcados en carrito
@@ -1269,7 +1314,10 @@ function togFalt(id){
 // (evita errores de redondeo en cascada al multiplicar precio/u × cantidad)
 function getSubtotalExacto(p,e,qty,precioUnit){
   const dv=e.danOn?parseFloat(e.danV)||0:0;
-  if(dv>0)return null; // con descuento por daño no aplica el total exacto
+  const modo=e.danModo||'t';
+  // Con descuento POR UNIDAD no aplica el total exacto (el precio/u ya cambió).
+  // Con descuento AL TOTAL sí puede aplicar, porque el descuento se resta aparte.
+  if(dv>0&&modo==='u')return null;
   const cajUds=p.desc_cj_uds||24;
   const mapas=[
     {key:'q',uds:3},{key:'m',uds:6},{key:'d',uds:12},{key:'cj',uds:cajUds}
@@ -1289,11 +1337,18 @@ function tCU(id){
     const p=prods.find(x=>x.id===id);
     const{precio,label}=getPU(p); // getPU ya considera precioLibre
     const dv=e.danOn?parseFloat(e.danV)||0:0;
-    const pf=e.precioLibre&&parseFloat(e.precioLibre)>0?parseFloat(e.precioLibre):rd2(Math.max(0,precio-dv));
-    const lbl=e.precioLibre&&parseFloat(e.precioLibre)>0?'precio libre':label;
-    const subExacto=e.precioLibre&&parseFloat(e.precioLibre)>0?null:getSubtotalExacto(p,e,e.qty,pf);
+    const modo=e.danModo||'t';
+    const esLibre=e.precioLibre&&parseFloat(e.precioLibre)>0;
+    let pf,lbl,subExacto,descTot=0;
+    if(esLibre){
+      pf=parseFloat(e.precioLibre);lbl='precio libre';subExacto=null;
+    }else if(dv>0&&modo==='t'){
+      pf=precio;descTot=dv;lbl=label;subExacto=getSubtotalExacto(p,e,e.qty,precio);
+    }else{
+      pf=rd2(Math.max(0,precio-dv));lbl=label;subExacto=getSubtotalExacto(p,e,e.qty,pf);
+    }
     const k='c'+(++cSeq);e.cKey=k;e.inc=true;
-    carrito.push({cKey:k,prodId:id,id,nombre:p.nombre,subNombre:'',precio:pf,qty:e.qty,tag:'u',label:lbl,nota:e.nota,subtotalExacto:subExacto});
+    carrito.push({cKey:k,prodId:id,id,nombre:p.nombre,subNombre:'',precio:pf,qty:e.qty,tag:'u',label:lbl,nota:e.nota,subtotalExacto:subExacto,descTotal:descTot});
   }
   buildCard(id);rCart();cV();
 }
@@ -1502,7 +1557,8 @@ function rCart(){
     const sub=getItemSubtotal(item);total=rd2(total+sub);
     const tagLbl=item.tag==='g'?'granel':item.tag==='saco'?'saco':item.tag==='bolsa'?'bolsa':'';
     const descExacto=item.subtotalExacto!=null?' <span style="color:var(--g);font-weight:600">(precio caja exacto)</span>':'';
-    const desc=item.tag==='u'?`${item.qty} × S/${item.precio.toFixed(4)}${item.label?` · <span style="color:var(--gd);font-weight:600">${item.label}</span>`:''}${descExacto}`:`${item.qty>1?item.qty+' × ':''}${item.subNombre}`;
+    const descDano=item.descTotal>0?` · <span style="color:var(--r);font-weight:600">-S/${item.descTotal.toFixed(2)} desc.</span>`:'';
+    const desc=item.tag==='u'?`${item.qty} × S/${item.precio.toFixed(4)}${item.label?` · <span style="color:var(--gd);font-weight:600">${item.label}</span>`:''}${descExacto}${descDano}`:`${item.qty>1?item.qty+' × ':''}${item.subNombre}`;
     return`<div class="ci"><div class="cinfo"><div class="cname">${item.nombre}</div><div class="csub">${desc}</div>${tagLbl?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;font-weight:700;display:inline-block;margin-top:2px;${tCls[item.tag]||''}">${tagLbl}</span>`:''}</div><div class="cprice">S/${sub.toFixed(2)}</div><button class="cdel" onclick="qC('${item.cKey}')"><i class="ti ti-x"></i></button></div>`;
   }).join('');
   if(cc)cc.textContent=carrito.length+' ítem'+(carrito.length>1?'s':'');
@@ -1531,6 +1587,7 @@ async function term(){
       precioBase:prods.find(x=>x.id===(i.id||i.prodId))?.precio||i.precio,
       label:i.label||'',
       tag:i.tag,
+      descTotal:i.descTotal||0,
       total:getItemSubtotal(i)
     }));
     const fechaHoy=new Date().toISOString().split('T')[0];
@@ -2261,6 +2318,18 @@ function rFormProd(p){
     '</div>';
   }).join('');
 
+  // Precios por volumen (kg) rows
+  const pvI = (p?.precios_volumen)||[];
+  const volHtml = pvI.map(function(v,i){
+    return '<div class="bolsa-row" id="pv-'+i+'">'+
+      '<span style="font-size:12px;color:var(--txt2);white-space:nowrap">Desde</span>'+
+      '<input type="number" placeholder="3" step="0.25" min="0" value="'+(v.desde||'')+'" id="pvd-'+i+'" style="max-width:70px">'+
+      '<span style="font-size:12px;color:var(--txt2);white-space:nowrap">kg → S/</span>'+
+      '<input type="number" placeholder="3.80" step="0.10" min="0" value="'+(v.precio||'')+'" id="pvp-'+i+'" style="max-width:80px">'+
+      '<button class="bolsa-del" onclick="document.getElementById(&apos;pv-'+i+'&apos;).remove()"><i class="ti ti-x"></i></button>'+
+    '</div>';
+  }).join('');
+
   // Bolsas rows
   const bolsasHtml = bI.map(function(b,i){
     return '<div class="bolsa-row" id="bw-'+i+'">'+
@@ -2315,6 +2384,10 @@ function rFormProd(p){
         '<input type="number" id="fp-kg" value="'+(p?.precio_kg||p?.precio||'')+'" step="0.10" min="0">'+
       '</div>'+
       htmlPrecioCompra(esAdmin, p, 'peso')+
+      '<div class="seclbl" style="margin-top:12px">Precios por volumen (opcional)</div>'+
+      '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Precio por kilo rebajado desde cierta cantidad. Aparecerá como casilla en caja.</div>'+
+      '<div id="vol-wrap">'+volHtml+'</div>'+
+      '<button class="btn-add-b" onclick="addVol()"><i class="ti ti-plus"></i> Agregar precio por volumen</button>'+
       '<div class="seclbl" style="margin-top:12px">Sacos</div>'+
       '<div id="sacos-wrap">'+sacosHtml+'</div>'+
       '<button class="btn-add-b" onclick="addSaco()"><i class="ti ti-plus"></i> Agregar saco</button>'+
@@ -2372,6 +2445,9 @@ let _si=0,_bi=0;
 function addSaco(){const w=document.getElementById('sacos-wrap');if(!w)return;const i=w.children.length+(_si++);const d=document.createElement('div');d.className='bolsa-row';d.id='sr-'+i;d.innerHTML=`<input type="text" placeholder="Ej: Saco 50kg" id="sl-${i}"><input type="number" placeholder="Precio" step="0.10" min="0" id="sp-${i}" style="max-width:90px"><button class="bolsa-del" onclick="document.getElementById('sr-${i}').remove()"><i class="ti ti-x"></i></button>`;w.appendChild(d);}
 function addBolsa(){const w=document.getElementById('bolsas-wrap');if(!w)return;const i=w.children.length+(_bi++);const d=document.createElement('div');d.className='bolsa-row';d.id='bw-'+i;d.innerHTML=`<input type="text" placeholder="Nombre bolsa" id="bn-${i}"><input type="number" placeholder="Precio" step="0.10" min="0" id="bp-${i}" style="max-width:90px"><button class="bolsa-del" onclick="document.getElementById('bw-${i}').remove()"><i class="ti ti-x"></i></button>`;w.appendChild(d);}
 function getSacos(){const w=document.getElementById('sacos-wrap');if(!w)return[];return Array.from(w.querySelectorAll('.bolsa-row')).map((row,i)=>{const id=row.id.replace('sr-','');const l=document.getElementById('sl-'+id)?.value.trim();const pr=parseFloat(document.getElementById('sp-'+id)?.value)||0;if(l&&pr>0)return{id:'s'+i,label:l,kg:parseFloat(l.match(/[\d.]+/)?.[0])||1,precio:pr};return null;}).filter(Boolean);}
+let _pvi=1000;
+function addVol(){const w=document.getElementById('vol-wrap');if(!w)return;const i='n'+(_pvi++);const d=document.createElement('div');d.className='bolsa-row';d.id='pv-'+i;d.innerHTML=`<span style="font-size:12px;color:var(--txt2);white-space:nowrap">Desde</span><input type="number" placeholder="3" step="0.25" min="0" id="pvd-${i}" style="max-width:70px"><span style="font-size:12px;color:var(--txt2);white-space:nowrap">kg → S/</span><input type="number" placeholder="3.80" step="0.10" min="0" id="pvp-${i}" style="max-width:80px"><button class="bolsa-del" onclick="document.getElementById('pv-${i}').remove()"><i class="ti ti-x"></i></button>`;w.appendChild(d);}
+function getVol(){const w=document.getElementById('vol-wrap');if(!w)return[];return Array.from(w.querySelectorAll('.bolsa-row')).map(row=>{const id=row.id.replace('pv-','');const desde=parseFloat(document.getElementById('pvd-'+id)?.value)||0;const precio=parseFloat(document.getElementById('pvp-'+id)?.value)||0;if(desde>0&&precio>0)return{desde,precio};return null;}).filter(Boolean).sort((a,b)=>a.desde-b.desde);}
 function getBolsas(){const w=document.getElementById('bolsas-wrap');if(!w)return[];return Array.from(w.querySelectorAll('.bolsa-row')).map((row,i)=>{const id=row.id.replace('bw-','');const n=document.getElementById('bn-'+id)?.value.trim();const pr=parseFloat(document.getElementById('bp-'+id)?.value)||0;if(n&&pr>0)return{id:'b'+i,nombre:n,precio:pr};return null;}).filter(Boolean);}
 let imgQuitada=false;
 function prevImg(input){
@@ -2437,7 +2513,7 @@ async function guardarProd(){
   let datos={nombre:nom,cat,stock,tipo:tipoSel,subcategoria:getSubcatValue()};
   const pcInput=parseFloat(document.getElementById('fp-pc')?.value)||0;
   if(tipoSel==='unidad'){const precio=parseFloat(document.getElementById('fp-p')?.value)||0;if(!precio){alert('Ingresa el precio base');return;}const cj=parseInt(document.getElementById('fp-cj')?.value)||24;['q','m','d'].forEach(k=>{datos[`desc_${k}_on`]=document.getElementById(`fdc-${k}`)?.checked||false;datos[`desc_${k}_precio`]=parseFloat(document.getElementById(`fdp-${k}`)?.value)||0;datos[`desc_${k}_total`]=parseFloat(document.getElementById(`fdt-${k}`)?.value)||0;});datos.desc_cj_on=document.getElementById('fdc-cj')?.checked||false;datos.desc_cj_precio=parseFloat(document.getElementById('fdp-cj')?.value)||0;datos.desc_cj_total=parseFloat(document.getElementById('fdt-cj')?.value)||0;datos.desc_cj_uds=cj;datos.precio=precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas=getBolsas();datos.bolsas_pred=[];datos.perm_danio=document.getElementById('fdc-dan')?.checked||false;if(pcInput)datos.precio_compra=pcInput;}
-  else if(tipoSel==='peso'){const kg=parseFloat(document.getElementById('fp-kg')?.value)||0;if(!kg){alert('Ingresa el precio por kilo');return;}datos.precio_kg=kg;datos.precio=kg;datos.sacos=getSacos();datos.bolsas_pred=getBolsas();datos.bolsas=[];datos.perm_danio=false;if(pcInput)datos.precio_compra=pcInput;}
+  else if(tipoSel==='peso'){const kg=parseFloat(document.getElementById('fp-kg')?.value)||0;if(!kg){alert('Ingresa el precio por kilo');return;}datos.precio_kg=kg;datos.precio=kg;datos.sacos=getSacos();datos.bolsas_pred=getBolsas();datos.bolsas=[];datos.perm_danio=false;datos.precios_volumen=getVol();if(pcInput)datos.precio_compra=pcInput;}
   else{const bolsas=getBolsas();if(!bolsas.length){alert('Agrega al menos una bolsa');return;}datos.bolsas=bolsas;datos.precio=bolsas[0].precio;datos.precio_kg=0;datos.sacos=[];datos.bolsas_pred=bolsas;datos.perm_danio=false;}
   if(ePId){
     const imgFile=document.getElementById('fp-img')?.files[0];
