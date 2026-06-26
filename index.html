@@ -527,7 +527,7 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <div>
       <div style="font-size:16px;font-weight:700;color:var(--txt)">📦 Faltantes de almacén</div>
-      <div style="font-size:11px;color:var(--txt2);margin-top:2px">Notas para traer al puesto. Al marcar, desaparecen en 2 minutos.</div>
+      <div style="font-size:11px;color:var(--txt2);margin-top:2px">Notas para traer al puesto. Se guardan hasta que las marques o elimines.</div>
     </div>
     <span id="falt-badge" style="display:none;background:var(--r);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px">0</span>
   </div>
@@ -689,6 +689,8 @@ async function loadAll(){
     listaCompras=lc||[];
     setConn(true);
     rCliSel();rCats();rP();rAlertasStock();actuBadge();
+    // Cargar notas de almacén desde Supabase
+    await loadFaltantes();actuFaltBadge();
     // Recuperar carrito si la app se cayó con una venta a medias
     recuperarCarrito();
   }catch(err){setConn(false);console.error(err);}
@@ -2716,7 +2718,30 @@ function rListaCompras(){
   if(done.length){html+=`<div class="lc-cat-header" style="color:var(--txt3);margin-top:16px"><i class="ti ti-check" style="font-size:11px;vertical-align:-1px"></i> Comprados</div>`;html+=done.map(item=>lcItemHtml(item)).join('');}
   cont.innerHTML=html;
 }
-function lcItemHtml(item){return`<div class="lc-item${item.comprado?' comprado':''}" id="lci-${item.id}"><div class="lc-check${item.comprado?' on':''}" onclick="toggleComprado(${item.id})">${item.comprado?'<i class="ti ti-check" style="font-size:12px;color:#fff"></i>':''}</div><div style="font-size:21px;flex-shrink:0">${getCatEmoji(item.cat)}</div><div class="lc-info"><div class="lc-nombre">${item.nombre}</div><div class="lc-cat">${item.cat||'Sin categoría'}${item.manual?' · manual':''}</div><input class="lc-nota-inp" type="text" placeholder="Nota (cantidad, marca...)" value="${item.nota||''}" oninput="setNotaLC(${item.id},this.value)"></div><button onclick="quitarDeLC(${item.id})" style="background:none;border:none;cursor:pointer;color:var(--txt3);font-size:15px;flex-shrink:0;padding:3px"><i class="ti ti-x"></i></button></div>`;}
+function lcItemHtml(item){
+  const est=item.estado||'';
+  return`<div class="lc-item${item.comprado?' comprado':''}" id="lci-${item.id}">
+    <div class="lc-check${item.comprado?' on':''}" onclick="toggleComprado(${item.id})">${item.comprado?'<i class="ti ti-check" style="font-size:12px;color:#fff"></i>':''}</div>
+    <div style="font-size:21px;flex-shrink:0">${getCatEmoji(item.cat)}</div>
+    <div class="lc-info">
+      <div class="lc-nombre">${item.nombre}</div>
+      <div class="lc-cat">${item.cat||'Sin categoría'}${item.manual?' · manual':''}</div>
+      <div style="display:flex;gap:5px;margin:5px 0">
+        <button onclick="setEstadoLC(${item.id},'poco')" style="padding:3px 9px;font-size:10px;font-weight:600;border-radius:6px;cursor:pointer;border:1px solid ${est==='poco'?'#D69E2E':'var(--border)'};background:${est==='poco'?'#FEF3C7':'transparent'};color:${est==='poco'?'#B45309':'var(--txt2)'}">Queda poco</button>
+        <button onclick="setEstadoLC(${item.id},'nada')" style="padding:3px 9px;font-size:10px;font-weight:600;border-radius:6px;cursor:pointer;border:1px solid ${est==='nada'?'var(--r)':'var(--border)'};background:${est==='nada'?'var(--rl)':'transparent'};color:${est==='nada'?'var(--r)':'var(--txt2)'}">No hay nada</button>
+      </div>
+      <input class="lc-nota-inp" type="text" placeholder="Detallar (cantidad, marca...)" value="${item.nota||''}" oninput="setNotaLC(${item.id},this.value)">
+    </div>
+    <button onclick="quitarDeLC(${item.id})" style="background:none;border:none;cursor:pointer;color:var(--txt3);font-size:15px;flex-shrink:0;padding:3px"><i class="ti ti-x"></i></button>
+  </div>`;
+}
+async function setEstadoLC(id,estado){
+  const item=listaCompras.find(x=>x.id===id);if(!item)return;
+  // Si ya tenía ese estado, lo quita (toggle)
+  item.estado=item.estado===estado?'':estado;
+  await sb.from('lista_compras').update({estado:item.estado}).eq('id',id);
+  rListaCompras();
+}
 async function toggleComprado(id){const item=listaCompras.find(x=>x.id===id);if(!item)return;item.comprado=!item.comprado;if(item.prod_id){if(item.comprado)faltantes.delete(item.prod_id);else faltantes.add(item.prod_id);}await sb.from('lista_compras').update({comprado:item.comprado}).eq('id',id);actuBadge();rListaCompras();}
 async function setNotaLC(id,val){const item=listaCompras.find(x=>x.id===id);if(item)item.nota=val;await sb.from('lista_compras').update({nota:val}).eq('id',id);}
 async function quitarDeLC(id){const item=listaCompras.find(x=>x.id===id);if(item?.prod_id)faltantes.delete(item.prod_id);await sb.from('lista_compras').delete().eq('id',id);listaCompras=listaCompras.filter(x=>x.id!==id);actuBadge();rListaCompras();}
@@ -3221,19 +3246,35 @@ async function elimCuenta(id,nombre){
 }
 
 // ── FALTANTES ALMACÉN ─────────────────────────────────────────────────────────
-let faltantesAlmacen=[]; // [{id,texto,hora,marcado,timer}]
-let faltSeq=1;
+let faltantesAlmacen=[]; // [{id,texto,marcado,...}]
 
-function addFaltante(){
+async function loadFaltantes(){
+  const{data}=await sb.from('faltantes_almacen').select('*').order('created_at',{ascending:false});
+  faltantesAlmacen=(data||[]).map(f=>({
+    id:f.id,
+    texto:f.texto,
+    marcado:f.marcado||false,
+    hora:f.created_at?new Date(f.created_at).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}):'',
+    timer:null,
+    progreso:100
+  }));
+}
+
+async function addFaltante(){
   const inp=document.getElementById('falt-inp');
   const texto=inp?.value.trim();
   if(!texto)return;
-  const ahora=new Date();
-  const hora=ahora.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
-  faltantesAlmacen.unshift({id:faltSeq++,texto,hora,marcado:false,timer:null,progreso:100});
   inp.value='';
-  rFaltantes();
-  actuFaltBadge();
+  try{
+    const{data,error}=await sb.from('faltantes_almacen').insert({texto,marcado:false}).select().single();
+    if(error)throw error;
+    faltantesAlmacen.unshift({
+      id:data.id,texto:data.texto,marcado:false,
+      hora:new Date(data.created_at).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}),
+      timer:null,progreso:100
+    });
+    rFaltantes();actuFaltBadge();
+  }catch(e){alert('No se pudo guardar la nota: '+e.message);if(inp)inp.value=texto;}
 }
 
 function rFaltantes(){
@@ -3254,38 +3295,55 @@ function rFaltantes(){
         </div>
         <button class="falt-del" onclick="elimFaltante(${f.id})" title="Eliminar"><i class="ti ti-x"></i></button>
       </div>
+      <div style="display:flex;gap:6px;margin-top:8px;margin-left:35px">
+        <button onclick="enviarFaltanteACompras(${f.id})" style="padding:5px 10px;font-size:11px;font-weight:600;border:1px solid #C4A0E8;background:#F3EDFB;color:#8B5CF6;border-radius:7px;cursor:pointer"><i class="ti ti-shopping-cart-plus" style="font-size:11px"></i> Enviar a compras</button>
+      </div>
       ${f.marcado?`<div class="prog-bar" id="fprog-${f.id}" style="width:${f.progreso}%"></div>`:''}
     </div>`).join('');
 }
 
-function marcarFaltante(id){
+async function marcarFaltante(id){
   const f=faltantesAlmacen.find(x=>x.id===id);if(!f||f.marcado)return;
-  f.marcado=true;
-  f.progreso=100;
-  rFaltantes();
-  actuFaltBadge();
-  // Animar barra de progreso — 2 minutos = 120 segundos
-  const DURACION=120; // segundos
-  const intervalo=1000; // cada 1 segundo
-  let segundos=0;
+  f.marcado=true;f.progreso=100;
+  await sb.from('faltantes_almacen').update({marcado:true}).eq('id',id);
+  rFaltantes();actuFaltBadge();
+  // Animar barra de progreso — 2 minutos
+  const DURACION=120;let segundos=0;
   f.timer=setInterval(()=>{
     segundos++;
     f.progreso=Math.max(0,100-Math.round(segundos/DURACION*100));
     const bar=document.getElementById('fprog-'+id);
     if(bar)bar.style.width=f.progreso+'%';
-    if(segundos>=DURACION){
-      clearInterval(f.timer);
-      elimFaltante(id);
-    }
-  },intervalo);
+    if(segundos>=DURACION){clearInterval(f.timer);elimFaltante(id);}
+  },1000);
 }
 
-function elimFaltante(id){
+async function elimFaltante(id){
   const f=faltantesAlmacen.find(x=>x.id===id);
   if(f?.timer)clearInterval(f.timer);
   faltantesAlmacen=faltantesAlmacen.filter(x=>x.id!==id);
-  rFaltantes();
-  actuFaltBadge();
+  await sb.from('faltantes_almacen').delete().eq('id',id);
+  rFaltantes();actuFaltBadge();
+}
+
+async function enviarFaltanteACompras(id){
+  const f=faltantesAlmacen.find(x=>x.id===id);if(!f)return;
+  // Crear en lista_compras como nota manual
+  try{
+    const{data}=await sb.from('lista_compras').insert({nombre:f.texto,cat:'Desde almacén',comprado:false,nota:'',manual:true}).select().single();
+    if(data){listaCompras.push(data);actuBadge();}
+    // Quitar de faltantes
+    if(f.timer)clearInterval(f.timer);
+    faltantesAlmacen=faltantesAlmacen.filter(x=>x.id!==id);
+    await sb.from('faltantes_almacen').delete().eq('id',id);
+    rFaltantes();actuFaltBadge();
+    // Aviso
+    const aviso=document.createElement('div');
+    aviso.style.cssText='position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#8B5CF6;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 14px rgba(0,0,0,.25)';
+    aviso.innerHTML='<i class="ti ti-check"></i> Enviado a Compras';
+    document.body.appendChild(aviso);
+    setTimeout(()=>aviso.remove(),2500);
+  }catch(e){alert('No se pudo enviar a compras: '+e.message);}
 }
 
 function actuFaltBadge(){
@@ -3316,7 +3374,7 @@ async function go(name,btn){
   }
   if(name==='deudas'){await loadDeudas();rDeu();}
   if(name==='compras')rListaCompras();
-  if(name==='faltantes')rFaltantes();
+  if(name==='faltantes'){await loadFaltantes();rFaltantes();actuFaltBadge();}
   if(name==='empleados'){mSEmp(true,false,false);rEmpl();}
   if(name==='categorias')renderCatsList();
   if(name==='cuentas')rCuentas();
