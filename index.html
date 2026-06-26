@@ -364,11 +364,25 @@ body{background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(
   <div id="subcats" style="display:none;gap:5px;margin-bottom:8px;flex-wrap:wrap"></div>
   <div class="pgrid" id="pgrid"></div>
   <!-- Botón flotante del carrito -->
+  <div id="sel-fab" onclick="abrirSeleccionados()" style="display:none;position:fixed;bottom:142px;right:16px;z-index:200;background:var(--b);color:#fff;border-radius:50px;padding:12px 18px;box-shadow:0 4px 16px rgba(12,68,124,.4);cursor:pointer;font-size:13px;font-weight:700;align-items:center;gap:8px">
+    <i class="ti ti-list-check" style="font-size:18px"></i>
+    <span>Editar productos</span>
+    <span id="sel-fab-n" style="background:rgba(255,255,255,.25);border-radius:20px;padding:2px 8px;font-size:11px">0</span>
+  </div>
   <div id="cart-fab" onclick="abrirCarrito()" style="display:none;position:fixed;bottom:80px;right:16px;z-index:200;background:var(--g);color:#fff;border-radius:50px;padding:12px 18px;box-shadow:0 4px 16px rgba(29,158,117,.4);cursor:pointer;font-size:13px;font-weight:700;align-items:center;gap:8px">
     <i class="ti ti-shopping-cart" style="font-size:18px"></i>
     <span id="cart-fab-total">S/ 0.00</span>
     <span id="cart-fab-n" style="background:rgba(255,255,255,.25);border-radius:20px;padding:2px 8px;font-size:11px">0</span>
   </div>
+</div>
+
+<!-- Pantalla de productos seleccionados (para editar sin buscar) -->
+<div id="s-seleccionados" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:450;overflow-y:auto">
+  <div style="position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;z-index:5">
+    <div style="font-size:16px;font-weight:800;color:var(--txt)"><i class="ti ti-list-check" style="color:var(--b);vertical-align:-2px"></i> Productos en venta</div>
+    <button onclick="cerrarSeleccionados()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--txt3);line-height:1">&times;</button>
+  </div>
+  <div style="padding:12px 16px 80px"><div class="pgrid" id="sel-grid"></div></div>
 </div>
 
 <!-- PANTALLA CARRITO -->
@@ -1457,6 +1471,28 @@ function cerrarCarrito(){
   const c=document.getElementById('s-carrito');
   if(c)c.style.display='none';
 }
+function abrirSeleccionados(){
+  const s=document.getElementById('s-seleccionados');
+  if(s){s.style.display='block';rSeleccionados();}
+}
+function cerrarSeleccionados(){
+  const s=document.getElementById('s-seleccionados');
+  if(s)s.style.display='none';
+  // Refrescar la búsqueda principal por si cambió algo
+  rP();
+}
+function rSeleccionados(){
+  const g=document.getElementById('sel-grid');if(!g)return;
+  // IDs únicos de productos que están en el carrito
+  const ids=[...new Set(carrito.map(c=>c.prodId||c.id).filter(Boolean))];
+  if(!ids.length){
+    g.innerHTML='<div class="empty" style="grid-column:1/-1;padding:40px 20px"><i class="ti ti-basket" style="font-size:42px;color:var(--txt3)"></i><p style="font-size:14px;font-weight:600;color:var(--txt)">No hay productos en venta</p><small style="font-size:12px;color:var(--txt3);display:block;margin-top:4px">Agrega productos desde la caja</small></div>';
+    return;
+  }
+  const lista=ids.map(id=>prods.find(p=>p.id===id)).filter(Boolean);
+  g.innerHTML=lista.map(p=>{const sc=scClase(p);const imgH=p.imagen_url?`<img src="${p.imagen_url}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'';const emoH=p.imagen_url?`<span style="display:none;font-size:32px;width:100%;height:100%;align-items:center;justify-content:center">${getCatEmoji(p.cat)}</span>`:`<span style="font-size:32px">${getCatEmoji(p.cat)}</span>`;return`<div class="pc${(EU[p.id]?.inc||anyItemOn(p.id))?' inc':''}${p.stock===0?' ns':''}" id="pc-${p.id}"><div class="ph">${imgH}${emoH}<span class="stock-mini ${sc}" style="position:absolute;top:5px;right:7px;z-index:2">${p.tipo==='unidad'?p.stock:'∞'}</span></div><div class="pb" id="pb-${p.id}"></div></div>`;}).join('');
+  lista.forEach(p=>buildCard(p.id));
+}
 function rCliSelCarrito(){
   const sel=document.getElementById('cli-sel2');
   if(!sel)return;
@@ -1586,13 +1622,19 @@ function actuFAB(){
   const fab=document.getElementById('cart-fab');
   const tot=document.getElementById('cart-fab-total');
   const n=document.getElementById('cart-fab-n');
+  const selFab=document.getElementById('sel-fab');
+  const selN=document.getElementById('sel-fab-n');
+  // Cantidad de productos distintos en el carrito
+  const numProd=new Set(carrito.map(c=>c.prodId||c.id).filter(Boolean)).size;
   if(!fab)return;
   if(carrito.length>0){
     fab.classList.add('vis');
     if(tot)tot.textContent='S/'+gT().toFixed(2);
     if(n)n.textContent=carrito.length;
+    if(selFab){selFab.style.display='flex';if(selN)selN.textContent=numProd;}
   } else {
     fab.classList.remove('vis');
+    if(selFab)selFab.style.display='none';
   }
 }
 function limpiarBusq(){
