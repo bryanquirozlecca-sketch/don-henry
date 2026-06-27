@@ -997,15 +997,14 @@ function toggleItem(prodId,key,precioBase,nombre,tag){
   if(!EI[prodId][key])EI[prodId][key]={on:false,qty:1,cKey:null};
   const st=EI[prodId][key];
   const p=prods.find(x=>x.id===prodId);
-  // Recalcular precio con descuento por daño al momento de marcar
+  // Descuento por daño se aplica UNA VEZ al total (no por unidad)
   const dv=EU[prodId]?.danOn?parseFloat(EU[prodId]?.danV)||0:0;
-  const precio=rd2(Math.max(0,precioBase-dv));
   if(st.on){
     carrito=carrito.filter(c=>c.cKey!==st.cKey);
     st.on=false;st.cKey=null;
   } else {
     const k='c'+(++cSeq);st.cKey=k;st.on=true;
-    carrito.push({cKey:k,prodId,id:prodId,nombre:p.nombre,subNombre:nombre,precio,qty:st.qty,tag,nota:EU[prodId]?.nota||''});
+    carrito.push({cKey:k,prodId,id:prodId,nombre:p.nombre,subNombre:nombre,precio:precioBase,qty:st.qty,tag,nota:EU[prodId]?.nota||'',descTotal:dv});
   }
   buildCard(prodId);rCart();cV();
 }
@@ -1013,14 +1012,13 @@ function setItemQty(prodId,key,precioBase,n){
   n=Math.max(1,parseInt(n)||1);
   if(!EI[prodId]||!EI[prodId][key])return;
   EI[prodId][key].qty=n;
-  // Recalcular precio con descuento por daño
+  // Descuento por daño se aplica UNA VEZ al total
   const dv=EU[prodId]?.danOn?parseFloat(EU[prodId]?.danV)||0:0;
-  const precio=rd2(Math.max(0,precioBase-dv));
   const c=carrito.find(x=>x.cKey===EI[prodId][key].cKey);
-  if(c){c.qty=n;c.precio=precio;}
-  // Actualizar subtotal visible sin reconstruir
+  if(c){c.qty=n;c.precio=precioBase;c.descTotal=dv;}
+  // Actualizar subtotal visible sin reconstruir (precio×qty menos descuento)
   const subEl=document.querySelector('#si-'+prodId+'-'+key+' .sel-sub');
-  if(subEl)subEl.textContent='= S/'+rd2(precio*n).toFixed(2);
+  if(subEl)subEl.textContent='= S/'+rd2(Math.max(0,precioBase*n-dv)).toFixed(2);
   const inp=document.querySelector('#si-'+prodId+'-'+key+' .qty-inp');
   if(inp&&parseInt(inp.value)!==n)inp.value=n;
   rCart();cV();
@@ -1310,10 +1308,23 @@ function onInpFin(id,tipo,val){
   const gi=carrito.findIndex(c=>c.prodId===id&&c.tag==='g');
   if(gi<0)return; // no está en carrito, nada que actualizar
   const pk=pkgEf(id);
-  let precio=0;
-  if(tipo==='g'){const g=parseFloat(val)||0;if(!g)return;precio=rd2((g/1000)*pk);}
-  else{const s=parseFloat(val)||0;if(!s)return;precio=s;}
+  const pkgTemp=parseFloat(e.precioKgTemp)||0;
+  let precio=0,subN='';
+  if(tipo==='g'){
+    const g=parseFloat(val)||0;if(!g)return;
+    precio=rd2((g/1000)*pk);
+    subN=g+'g';
+  }else{
+    const s=parseFloat(val)||0;if(!s)return;
+    precio=s;
+    // En modo soles, calcular los gramos equivalentes para el despacho
+    const gramos=Math.round(s/(pk||1)*1000);
+    subN='S/'+precio+' ('+gramos+'g)';
+  }
+  // Agregar el precio por kilo temporal al detalle si aplica
+  if(pkgTemp>0)subN+=' · S/'+pkgTemp.toFixed(2)+'/kg';
   carrito[gi].precio=precio;
+  carrito[gi].subNombre=subN; // Actualizar los gramos que salen en la boleta
   rCart();
 }
 function sD(id,k,c){EU[id].dSel=c?k:null;acC(id);buildCard(id);rCart();cV();}
@@ -1348,16 +1359,17 @@ function sDan(id,v){
 function actualizarPreciosItems(prodId){
   const dv=EU[prodId]?.danOn?parseFloat(EU[prodId]?.danV)||0:0;
   // Actualizar todos los items del carrito de este producto (sacos/bolsas)
+  // El descuento se aplica UNA VEZ al total de cada línea (descTotal), no por unidad.
   carrito.forEach(c=>{
     if((c.prodId===prodId||c.id===prodId)&&c.tag!=='u'&&c.tag!=='g'){
-      // Buscar precio base en el producto
       const p=prods.find(x=>x.id===prodId);
       if(!p)return;
-      // Buscar en sacos
+      // Buscar precio base original
       const saco=(p.sacos||[]).find(s=>c.subNombre.includes(s.label));
       const bolsa=(p.bolsas_pred||p.bolsas||[]).find(b=>c.subNombre===b.nombre||c.subNombre.includes(b.nombre));
-      const precioBase=saco?saco.precio:bolsa?bolsa.precio:c.precio+dv;
-      c.precio=rd2(Math.max(0,precioBase-dv));
+      const precioBase=saco?saco.precio:bolsa?bolsa.precio:c.precio;
+      c.precio=precioBase;       // precio unitario queda intacto
+      c.descTotal=dv;            // descuento una sola vez al total
     }
   });
 }
